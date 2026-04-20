@@ -19,7 +19,7 @@ from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     # Get package directory
-    pkg_dir = get_package_share_directory('puzzlebot_sim')
+    pkg_dir = get_package_share_directory('puzzlebot_sim2')
     
     # Paths to config files
     urdf_file = os.path.join(pkg_dir, 'urdf', 'puzzlebot.urdf')
@@ -59,15 +59,15 @@ def generate_launch_description():
     
     # Puzzlebot Simulator node
     sim_node = Node(
-        package='puzzlebot_sim',
-        executable='puzzlebot_sim',
+        package='puzzlebot_sim2',
+        executable='puzzlebot_sim2',
         name='puzzlebot_sim_node',
         output='screen',
     )
     
     # Localization node
     loc_node = Node(
-        package='puzzlebot_sim',
+        package='puzzlebot_sim2',
         executable='localization',
         name='localization_node',
         output='screen',
@@ -75,7 +75,7 @@ def generate_launch_description():
     
     # Trajectory Generator node
     traj_node = Node(
-        package='puzzlebot_sim',
+        package='puzzlebot_sim2',
         executable='trajectory_generator',
         name='trajectory_generator_node',
         output='screen',
@@ -89,7 +89,7 @@ def generate_launch_description():
     
     # Controller node
     ctrl_node = Node(
-        package='puzzlebot_sim',
+        package='puzzlebot_sim2',
         executable='controller',
         name='controller_node',
         output='screen',

@@ -15,7 +15,7 @@
 	<link name="base_link">
 		<visual>
 			<geometry>
-				<mesh filename="package://puzzlebot_sim/meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl" />
+				<mesh filename="package://puzzlebot_sim2/meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl" />
 			</geometry>
 			<material name="black2" />
 		</visual>
@@ -36,7 +36,7 @@
 		<visual>
 			<origin xyz="0 0 0" rpy="1.5708 0 0" />
 			<geometry>
-				<mesh filename="package://puzzlebot_sim/meshes/Puzzlebot_Wheel.stl" />
+				<mesh filename="package://puzzlebot_sim2/meshes/Puzzlebot_Wheel.stl" />
 			</geometry>
 			<material name="black" />
 		</visual>
@@ -57,7 +57,7 @@
 		<visual>
 			<origin xyz="0 0 0" rpy="1.5708 0 0" />
 			<geometry>
-				<mesh filename="package://puzzlebot_sim/meshes/Puzzlebot_Wheel.stl" />
+				<mesh filename="package://puzzlebot_sim2/meshes/Puzzlebot_Wheel.stl" />
 			</geometry>
 			<material name="black" />
 		</visual>
@@ -78,7 +78,7 @@
 		<visual>
 			<origin xyz="0 0 0" rpy="0 0 0" />
 			<geometry>
-				<mesh filename="package://puzzlebot_sim/meshes/Puzzlebot_Caster_Wheel.stl" />
+				<mesh filename="package://puzzlebot_sim2/meshes/Puzzlebot_Caster_Wheel.stl" />
 			</geometry>
 			<material name="black" />
 		</visual>

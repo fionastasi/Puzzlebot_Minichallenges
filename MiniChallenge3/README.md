@@ -53,7 +53,7 @@ Wheel-speed relations:
 
 | Node | Role | Subscribes | Publishes |
 |---|---|---|---|
-| puzzlebot_sim | Differential-drive kinematic simulator | cmd_vel (geometry_msgs/Twist) | pose_sim (geometry_msgs/PoseStamped), wr (std_msgs/Float32), wl (std_msgs/Float32) |
+| puzzlebot_sim2 | Differential-drive kinematic simulator | cmd_vel (geometry_msgs/Twist) | pose_sim (geometry_msgs/PoseStamped), wr (std_msgs/Float32), wl (std_msgs/Float32) |
 | localization | Dead-reckoning odometry estimator | wr (std_msgs/Float32), wl (std_msgs/Float32) | odom (nav_msgs/Odometry), pose_odom (geometry_msgs/PoseStamped) |
 | trajectory_generator | Polygon waypoint generator | None | target_pose (geometry_msgs/PoseStamped) |
 | controller | PD tracking controller | odom (nav_msgs/Odometry), target_pose (geometry_msgs/PoseStamped) | cmd_vel (geometry_msgs/Twist) |
