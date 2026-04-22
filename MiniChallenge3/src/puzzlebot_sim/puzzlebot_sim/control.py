@@ -11,8 +11,8 @@ class Control(Node):
     def __init__(self):
         super().__init__('control')
 
-        self.declare_parameter('goal_x', 3.0)
-        self.declare_parameter('goal_y', 2.0)
+        self.declare_parameter('goal_x', -3.0)
+        self.declare_parameter('goal_y', -2.0)
         self.declare_parameter('k_rho', 0.8)
         self.declare_parameter('k_alpha', 1.5)
         self.declare_parameter('v_max', 0.5)
@@ -70,20 +70,21 @@ class Control(Node):
 
         cmd = Twist()
 
+        # Si estamos dentro de la tolerancia del objetivo, detenemos el robot
         if rho < self.goal_tolerance:
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
             return
-        
-        v = self.k_rho * rho
-        w = self.k_alpha * alpha
 
-        v = self.clamp(v, -self.v_max, self.v_max)
-        w = self.clamp(w, -self.w_max, self.w_max)
-
-        cmd.linear.x = v
-        cmd.angular.z = w
+        # Primera etapa: Rotar hacia el ángulo deseado
+        if abs(alpha) > 0.1:  # Tolerancia para la rotación
+            cmd.linear.x = 0.0  # No avanzar mientras rota
+            cmd.angular.z = self.clamp(self.k_alpha * alpha, -self.w_max, self.w_max)
+        else:
+            # Segunda etapa: Avanzar hacia el objetivo
+            cmd.linear.x = self.clamp(self.k_rho * rho, -self.v_max, self.v_max)
+            cmd.angular.z = 0.0  # No rotar mientras avanza
 
         self.cmd_vel_pub.publish(cmd)
 
