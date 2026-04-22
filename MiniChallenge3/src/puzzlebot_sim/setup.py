@@ -1,6 +1,3 @@
-import os
-from glob import glob
-
 from setuptools import find_packages, setup
 
 package_name = 'puzzlebot_sim'
@@ -13,25 +10,25 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*')),
-        (os.path.join('share', package_name, 'rviz'), glob('rviz/*')),
-        (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
-        (os.path.join('share', package_name, 'meshes'), glob('meshes/*')),
+        ('share/puzzlebot_sim/meshes', ['meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl', 
+                                        'meshes/Puzzlebot_Caster_Wheel.stl', 'meshes/Puzzlebot_Wheel.stl']),
+        ('share/puzzlebot_sim/urdf', ['urdf/puzzlebot.urdf']),
+        ('share/puzzlebot_sim/launch', ['launch/display.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='aaraizae',
-    maintainer_email='aaraizae@hotmail.com',
+    maintainer='danieldrg',
+    maintainer_email='dreggam@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'controller = puzzlebot_sim.controller_node:main',
-            'localization = puzzlebot_sim.localization_node:main',
-            'puzzlebot_sim = puzzlebot_sim.puzzlebot_sim_node:main',
-            'trajectory_generator = puzzlebot_sim.trajectory_generator_node:main',
+            'robot_markers = puzzlebot_sim.robot_markers:main',
+            'URDF_tfs= puzzlebot_sim.URDF_tfs:main',
+            'kinematic_model = puzzlebot_sim.kinematic_model:main',
+            'localisation = puzzlebot_sim.localisation:main',
+            'control = puzzlebot_sim.control:main',
         ],
     },
 )
