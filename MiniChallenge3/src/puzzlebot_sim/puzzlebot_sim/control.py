@@ -11,16 +11,12 @@ class Control(Node):
     def __init__(self):
         super().__init__('control')
 
-        self.declare_parameter('goal_x', 1.0)
-        self.declare_parameter('goal_y', 1.0)
         self.declare_parameter('k_rho', 0.8)
         self.declare_parameter('k_alpha', 1.5)
-        self.declare_parameter('v_max', 0.2)
-        self.declare_parameter('w_max', 1.0)
+        self.declare_parameter('v_max', 0.5)
+        self.declare_parameter('w_max', 2.0)
         self.declare_parameter('goal_tolerance', 0.05)
 
-        self.goal_x = self.get_parameter('goal_x').value
-        self.goal_y = self.get_parameter('goal_y').value
         self.k_rho = self.get_parameter('k_rho').value
         self.k_alpha = self.get_parameter('k_alpha').value
         self.v_max = self.get_parameter('v_max').value
@@ -33,6 +29,11 @@ class Control(Node):
         self.x = 0.0
         self.y = 0.0
         self.theta = 0.0
+
+        # Lista de objetivos (ruta en forma de triángulo)
+        self.goals = [(2.0, 0.0), (2.0, 2.0), (0.0, 0.0)]
+        self.current_goal_index = 0
+        self.goal_x, self.goal_y = self.goals[self.current_goal_index]
 
         self.timer = self.create_timer(0.02, self.control_loop)
 
@@ -70,20 +71,27 @@ class Control(Node):
 
         cmd = Twist()
 
+        # Si estamos dentro de la tolerancia del objetivo, pasamos al siguiente objetivo
         if rho < self.goal_tolerance:
-            cmd.linear.x = 0.0
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
-            return
-        
-        v = self.k_rho * rho
-        w = self.k_alpha * alpha
+            self.current_goal_index += 1
+            if self.current_goal_index < len(self.goals):
+                self.goal_x, self.goal_y = self.goals[self.current_goal_index]
+                self.get_logger().info(f"Nuevo objetivo: x={self.goal_x}, y={self.goal_y}")
+            else:
+                self.get_logger().info("Ruta completada. Deteniendo el robot.")
+                cmd.linear.x = 0.0
+                cmd.angular.z = 0.0
+                self.cmd_vel_pub.publish(cmd)
+                return
 
-        v = self.clamp(v, -self.v_max, self.v_max)
-        w = self.clamp(w, -self.w_max, self.w_max)
-
-        cmd.linear.x = v
-        cmd.angular.z = w
+        # Primera etapa: Rotar hacia el ángulo deseado
+        if abs(alpha) > 0.1:  # Tolerancia para la rotación
+            cmd.linear.x = 0.0  # No avanzar mientras rota
+            cmd.angular.z = self.clamp(self.k_alpha * alpha, -self.w_max, self.w_max)
+        else:
+            # Segunda etapa: Avanzar hacia el objetivo
+            cmd.linear.x = self.clamp(self.k_rho * rho, -self.v_max, self.v_max)
+            cmd.angular.z = 0.0  # No rotar mientras avanza
 
         self.cmd_vel_pub.publish(cmd)
 

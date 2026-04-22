@@ -32,4 +32,10 @@ def generate_launch_description():
             name='URDF_tfs',
             output='screen'
         ),
+        Node(
+            package='puzzlebot_sim',
+            executable='control',
+            name='control',
+            output='screen'
+        ),
     ])
