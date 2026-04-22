@@ -14,6 +14,7 @@ setup(
                                         'meshes/Puzzlebot_Caster_Wheel.stl', 'meshes/Puzzlebot_Wheel.stl']),
         ('share/puzzlebot_sim/urdf', ['urdf/puzzlebot.urdf']),
         ('share/puzzlebot_sim/launch', ['launch/display.launch.py']),
+        ('share/puzzlebot_sim/launch', ['launch/combined.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

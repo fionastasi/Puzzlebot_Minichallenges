@@ -11,12 +11,12 @@ class Control(Node):
     def __init__(self):
         super().__init__('control')
 
-        self.declare_parameter('goal_x', 1.0)
-        self.declare_parameter('goal_y', 1.0)
+        self.declare_parameter('goal_x', 3.0)
+        self.declare_parameter('goal_y', 2.0)
         self.declare_parameter('k_rho', 0.8)
         self.declare_parameter('k_alpha', 1.5)
-        self.declare_parameter('v_max', 0.2)
-        self.declare_parameter('w_max', 1.0)
+        self.declare_parameter('v_max', 0.5)
+        self.declare_parameter('w_max', 2.0)
         self.declare_parameter('goal_tolerance', 0.05)
 
         self.goal_x = self.get_parameter('goal_x').value
