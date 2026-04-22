@@ -17,7 +17,7 @@ from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     # Get package directory
-    pkg_dir = get_package_share_directory('puzzlebot_sim2')
+    pkg_dir = get_package_share_directory('puzzlebot_sim')
     
     # Paths to config files
     urdf_file = os.path.join(pkg_dir, 'urdf', 'puzzlebot.urdf')
@@ -44,15 +44,15 @@ def generate_launch_description():
     
     # Puzzlebot Simulator node
     sim_node = Node(
-        package='puzzlebot_sim2',
-        executable='puzzlebot_sim2',
+        package='puzzlebot_sim',
+        executable='puzzlebot_sim',
         name='puzzlebot_sim_node',
         output='screen',
     )
     
     # Localization node
     loc_node = Node(
-        package='puzzlebot_sim2',
+        package='puzzlebot_sim',
         executable='localization',
         name='localization_node',
         output='screen',

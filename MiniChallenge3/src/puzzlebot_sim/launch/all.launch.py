@@ -12,7 +12,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     # Get package directory
-    pkg_dir = get_package_share_directory('puzzlebot_sim2')
+    pkg_dir = get_package_share_directory('puzzlebot_sim')
     
     # Path to control launch
     control_launch = os.path.join(pkg_dir, 'launch', 'control.launch.py')

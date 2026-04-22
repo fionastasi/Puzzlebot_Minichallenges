@@ -28,6 +28,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'controller = puzzlebot_sim.controller_node:main',
+            'localization = puzzlebot_sim.localization_node:main',
+            'puzzlebot_sim = puzzlebot_sim.puzzlebot_sim_node:main',
+            'trajectory_generator = puzzlebot_sim.trajectory_generator_node:main',
         ],
     },
 )
