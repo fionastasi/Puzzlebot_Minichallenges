@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -21,6 +21,7 @@ def generate_launch_description():
     goal_y_arg = DeclareLaunchArgument('goal_y', default_value='0.0')
 
     robot_name = LaunchConfiguration('robot_name')
+    frame_prefix = PythonExpression(["'", robot_name, "' + '/'"])
     x0 = LaunchConfiguration('x0')
     y0 = LaunchConfiguration('y0')
     theta0 = LaunchConfiguration('theta0')
@@ -50,7 +51,7 @@ def generate_launch_description():
             parameters=[
                 {
                     'robot_description': robot_desc,
-                    'frame_prefix': [robot_name, '/'],
+                    'frame_prefix': frame_prefix,
                 }
             ]
         ),

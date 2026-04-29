@@ -10,10 +10,11 @@ class Markers(Node):
 
     def __init__(self):
         super().__init__('markers')
-        self.marker_pub = self.create_publisher(Marker, "/sim_markers", 10)
+        self.marker_pub = self.create_publisher(Marker, 'sim_markers', 10)
         self.timer = self.create_timer(0.1, self.publish_markers) # 10 Hz
         self.broadcaster = TransformBroadcaster(self)
         self.static_broadcaster = StaticTransformBroadcaster(self)
+        self.ns_prefix = self.get_namespace().strip('/')
         self.publish_static_tf()
 
         self.x = 0.0
@@ -24,10 +25,15 @@ class Markers(Node):
         self.center_x = 0.0
         self.center_y = 0.0
 
+    def frame_id(self, name):
+        if self.ns_prefix:
+            return f'{self.ns_prefix}/{name}'
+        return name
+
     def base_complete(self, stamp):
         marker = Marker()
 
-        marker.header.frame_id = "base_link"
+        marker.header.frame_id = self.frame_id('base_link')
         marker.header.stamp = stamp
         marker.frame_locked = True
 
@@ -54,7 +60,7 @@ class Markers(Node):
     def left_wheel(self, stamp):
         marker = Marker()
 
-        marker.header.frame_id = 'wheel_l'
+        marker.header.frame_id = self.frame_id('wheel_l')
         marker.header.stamp = stamp
         marker.frame_locked = True
 
@@ -84,7 +90,7 @@ class Markers(Node):
     def right_wheel(self, stamp):
         marker = Marker()
 
-        marker.header.frame_id = 'wheel_r'
+        marker.header.frame_id = self.frame_id('wheel_r')
         marker.header.stamp = stamp
         marker.frame_locked = True
 
@@ -114,7 +120,7 @@ class Markers(Node):
     def back_wheel(self, stamp):
         marker = Marker()
 
-        marker.header.frame_id = 'caster'
+        marker.header.frame_id = self.frame_id('caster')
         marker.header.stamp = stamp
         marker.frame_locked = True
 
@@ -151,8 +157,8 @@ class Markers(Node):
 
         t = TransformStamped()
         t.header.stamp = stamp
-        t.header.frame_id = "map"
-        t.child_frame_id = "odom"
+        t.header.frame_id = self.frame_id('map')
+        t.child_frame_id = self.frame_id('odom')
 
         t.transform.translation.x = 0.0
         t.transform.translation.y = 0.0
@@ -167,8 +173,8 @@ class Markers(Node):
 
         t_base_caster = TransformStamped()
         t_base_caster.header.stamp = stamp
-        t_base_caster.header.frame_id = 'base_link'
-        t_base_caster.child_frame_id = 'caster'
+        t_base_caster.header.frame_id = self.frame_id('base_link')
+        t_base_caster.child_frame_id = self.frame_id('caster')
 
         t_base_caster.transform.translation.x = -0.095
         t_base_caster.transform.translation.y = 0.0
@@ -190,8 +196,8 @@ class Markers(Node):
         #  Odom to base
         t = TransformStamped()
         t.header.stamp = stamp
-        t.header.frame_id = 'odom'
-        t.child_frame_id = 'base_footprint'
+        t.header.frame_id = self.frame_id('odom')
+        t.child_frame_id = self.frame_id('base_footprint')
 
         self.x = self.center_x + self.r * np.cos(self.w * actual_time)
         self.y = self.center_y + self.r * np.sin(self.w * actual_time)
@@ -215,8 +221,8 @@ class Markers(Node):
         # Base to footprint
         t_base_footprint = TransformStamped()
         t_base_footprint.header.stamp = stamp
-        t_base_footprint.header.frame_id = 'base_footprint'
-        t_base_footprint.child_frame_id = 'base_link'
+        t_base_footprint.header.frame_id = self.frame_id('base_footprint')
+        t_base_footprint.child_frame_id = self.frame_id('base_link')
 
         t_base_footprint.transform.translation.x = 0.0
         t_base_footprint.transform.translation.y = 0.0
@@ -232,8 +238,8 @@ class Markers(Node):
         # Base to left wheel
         t_base_wheel_l = TransformStamped()
         t_base_wheel_l.header.stamp = stamp
-        t_base_wheel_l.header.frame_id = 'base_link'
-        t_base_wheel_l.child_frame_id = 'wheel_l'
+        t_base_wheel_l.header.frame_id = self.frame_id('base_link')
+        t_base_wheel_l.child_frame_id = self.frame_id('wheel_l')
 
         t_base_wheel_l.transform.translation.x = 0.052 #0.0
         t_base_wheel_l.transform.translation.y = 0.095 #0.085
@@ -249,8 +255,8 @@ class Markers(Node):
         # Base to right wheel
         t_base_wheel_r = TransformStamped()
         t_base_wheel_r.header.stamp = stamp
-        t_base_wheel_r.header.frame_id = 'base_link'
-        t_base_wheel_r.child_frame_id = 'wheel_r'
+        t_base_wheel_r.header.frame_id = self.frame_id('base_link')
+        t_base_wheel_r.child_frame_id = self.frame_id('wheel_r')
         t_base_wheel_r.transform.translation.x = 0.052 #0.0
         t_base_wheel_r.transform.translation.y = -0.095 #-0.085
         t_base_wheel_r.transform.translation.z = 0.0025 #-0.03
