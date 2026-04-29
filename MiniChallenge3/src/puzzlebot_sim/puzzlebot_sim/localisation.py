@@ -10,9 +10,9 @@ class Localisation(Node):
 
     def __init__(self):
         super().__init__('localisation')
-        self.wr_sub = self.create_subscription(Float32, '/wr', self.wr_callback, 10)
-        self.wl_sub = self.create_subscription(Float32, '/wl', self.wl_callback, 10)
-        self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
+        self.wr_sub = self.create_subscription(Float32, 'wr', self.wr_callback, 10)
+        self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
+        self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
         self.r = 0.05
         self.l = 0.19

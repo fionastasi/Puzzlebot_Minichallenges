@@ -10,17 +10,21 @@ class KinematicModel(Node):
 
     def __init__(self):
         super().__init__('puzzlebot_kinematic_model')
-        self.cmd_vel_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
-        self.pose_pub = self.create_publisher(PoseStamped, '/pose_sim', 10)
-        self.wr_pub = self.create_publisher(Float32, '/wr', 10)
-        self.wl_pub = self.create_publisher(Float32, '/wl', 10)
+        self.cmd_vel_sub = self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 10)
+        self.pose_pub = self.create_publisher(PoseStamped, 'pose_sim', 10)
+        self.wr_pub = self.create_publisher(Float32, 'wr', 10)
+        self.wl_pub = self.create_publisher(Float32, 'wl', 10)
+
+        self.declare_parameter('initial_x', 0.0)
+        self.declare_parameter('initial_y', 0.0)
+        self.declare_parameter('initial_theta', 0.0)
 
         self.r = 0.05   # radio de rueda [m]
         self.l = 0.19   # distancia entre ruedas [m]
 
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        self.x = self.get_parameter('initial_x').value
+        self.y = self.get_parameter('initial_y').value
+        self.theta = self.get_parameter('initial_theta').value
 
         self.v = 0.0
         self.w = 0.0
