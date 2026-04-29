@@ -10,17 +10,24 @@ class KinematicModel(Node):
 
     def __init__(self):
         super().__init__('puzzlebot_kinematic_model')
-        self.cmd_vel_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
-        self.pose_pub = self.create_publisher(PoseStamped, '/pose_sim', 10)
-        self.wr_pub = self.create_publisher(Float32, '/wr', 10)
-        self.wl_pub = self.create_publisher(Float32, '/wl', 10)
+
+        self.declare_parameter('x0', 0.0)
+        self.declare_parameter('y0', 0.0)
+        self.declare_parameter('theta0', 0.0)
+
+        self.cmd_vel_sub = self.create_subscription(Twist, 'cmd_vel', self.cmd_vel_callback, 10)
+        self.pose_pub = self.create_publisher(PoseStamped, 'pose_sim', 10)
+        self.wr_pub = self.create_publisher(Float32, 'wr', 10)
+        self.wl_pub = self.create_publisher(Float32, 'wl', 10)
 
         self.r = 0.05   # radio de rueda [m]
         self.l = 0.19   # distancia entre ruedas [m]
 
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        self.x = self.get_parameter('x0').value
+        self.y = self.get_parameter('y0').value
+        self.theta = self.get_parameter('theta0').value
+
+        self.ns_prefix = self.get_namespace().strip('/')
 
         self.v = 0.0
         self.w = 0.0
@@ -30,6 +37,11 @@ class KinematicModel(Node):
 
         self.dt = 0.02
         self.timer = self.create_timer(self.dt, self.update_simulation)
+
+    def frame_id(self, name):
+        if self.ns_prefix:
+            return f'{self.ns_prefix}/{name}'
+        return name
 
     def cmd_vel_callback(self, msg):
         self.v = msg.linear.x
@@ -52,7 +64,7 @@ class KinematicModel(Node):
         pose_msg = PoseStamped()
 
         pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.header.frame_id = 'odom'
+        pose_msg.header.frame_id = self.frame_id('odom')
 
         pose_msg.pose.position.x = self.x
         pose_msg.pose.position.y = self.y

@@ -1,38 +1,43 @@
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
+
 def generate_launch_description():
     pkg_path = get_package_share_directory('puzzlebot_sim')
+    robot_launch = os.path.join(pkg_path, 'launch', 'robot.launch.py')
 
-    # Include display.launch.py
-    display_launch = IncludeLaunchDescription(
+    robot1_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_path, 'launch', 'display.launch.py')
-        )
+            robot_launch
+        ),
+        launch_arguments={
+            'robot_name': 'robot1',
+            'x0': '0.0',
+            'y0': '0.0',
+            'theta0': '0.0',
+            'goal_x': '2.0',
+            'goal_y': '0.0',
+        }.items()
     )
 
-    # Node for kinematic_model.py
-    kinematic_model_node = Node(
-        package='puzzlebot_sim',
-        executable='kinematic_model',
-        name='kinematic_model',
-        output='screen'
-    )
-
-    # Node for localisation.py
-    localisation_node = Node(
-        package='puzzlebot_sim',
-        executable='localisation',
-        name='localisation',
-        output='screen'
+    robot2_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            robot_launch
+        ),
+        launch_arguments={
+            'robot_name': 'robot2',
+            'x0': '-1.0',
+            'y0': '1.0',
+            'theta0': '1.57',
+            'goal_x': '-2.0',
+            'goal_y': '2.0',
+        }.items()
     )
 
     return LaunchDescription([
-        display_launch,
-        kinematic_model_node,
-        localisation_node
+        robot1_launch,
+        robot2_launch,
     ])

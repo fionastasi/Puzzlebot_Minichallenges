@@ -10,9 +10,14 @@ class Localisation(Node):
 
     def __init__(self):
         super().__init__('localisation')
-        self.wr_sub = self.create_subscription(Float32, '/wr', self.wr_callback, 10)
-        self.wl_sub = self.create_subscription(Float32, '/wl', self.wl_callback, 10)
-        self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
+
+        self.declare_parameter('x0', 0.0)
+        self.declare_parameter('y0', 0.0)
+        self.declare_parameter('theta0', 0.0)
+
+        self.wr_sub = self.create_subscription(Float32, 'wr', self.wr_callback, 10)
+        self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
+        self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
         self.r = 0.05
         self.l = 0.19
@@ -20,15 +25,22 @@ class Localisation(Node):
         self.wr = 0.0
         self.wl = 0.0
 
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        self.x = self.get_parameter('x0').value
+        self.y = self.get_parameter('y0').value
+        self.theta = self.get_parameter('theta0').value
+
+        self.ns_prefix = self.get_namespace().strip('/')
 
         self.v = 0.0
         self.w = 0.0
 
         self.dt = 0.02
         self.timer = self.create_timer(self.dt, self.update_localisation)
+
+    def frame_id(self, name):
+        if self.ns_prefix:
+            return f'{self.ns_prefix}/{name}'
+        return name
 
     def wr_callback(self, msg):
         self.wr = msg.data
@@ -53,8 +65,8 @@ class Localisation(Node):
         odom_msg = Odometry()
 
         odom_msg.header.stamp = self.get_clock().now().to_msg()
-        odom_msg.header.frame_id = 'odom'
-        odom_msg.child_frame_id = 'base_footprint'
+        odom_msg.header.frame_id = self.frame_id('odom')
+        odom_msg.child_frame_id = self.frame_id('base_footprint')
 
         odom_msg.pose.pose.position.x = self.x
         odom_msg.pose.pose.position.y = self.y

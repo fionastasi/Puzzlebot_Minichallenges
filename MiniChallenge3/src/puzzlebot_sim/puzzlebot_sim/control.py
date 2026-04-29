@@ -16,24 +16,26 @@ class Control(Node):
         self.declare_parameter('v_max', 0.5)
         self.declare_parameter('w_max', 2.0)
         self.declare_parameter('goal_tolerance', 0.05)
+        self.declare_parameter('goal_x', 2.0)
+        self.declare_parameter('goal_y', 0.0)
 
         self.k_rho = self.get_parameter('k_rho').value
         self.k_alpha = self.get_parameter('k_alpha').value
         self.v_max = self.get_parameter('v_max').value
         self.w_max = self.get_parameter('w_max').value
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        self.goal_x = self.get_parameter('goal_x').value
+        self.goal_y = self.get_parameter('goal_y').value
 
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # Use relative topics so ROS namespace remapping works for multi-robot launch.
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
 
         self.x = 0.0
         self.y = 0.0
         self.theta = 0.0
 
-        # Lista de objetivos (ruta en forma de triángulo)
-        self.goals = [(2.0, 0.0), (2.0, 2.0), (0.0, 0.0)]
-        self.current_goal_index = 0
-        self.goal_x, self.goal_y = self.goals[self.current_goal_index]
+        self.goal_reached = False
 
         self.timer = self.create_timer(0.02, self.control_loop)
 
@@ -62,6 +64,9 @@ class Control(Node):
         return max(min(value, max_value), min_value)
     
     def control_loop(self):
+        if self.goal_reached:
+            return
+
         dx = self.goal_x - self.x
         dy = self.goal_y - self.y
 
@@ -71,18 +76,14 @@ class Control(Node):
 
         cmd = Twist()
 
-        # Si estamos dentro de la tolerancia del objetivo, pasamos al siguiente objetivo
+        # Stop once the configured goal has been reached.
         if rho < self.goal_tolerance:
-            self.current_goal_index += 1
-            if self.current_goal_index < len(self.goals):
-                self.goal_x, self.goal_y = self.goals[self.current_goal_index]
-                self.get_logger().info(f"Nuevo objetivo: x={self.goal_x}, y={self.goal_y}")
-            else:
-                self.get_logger().info("Ruta completada. Deteniendo el robot.")
-                cmd.linear.x = 0.0
-                cmd.angular.z = 0.0
-                self.cmd_vel_pub.publish(cmd)
-                return
+            self.get_logger().info(f"Goal reached: x={self.goal_x}, y={self.goal_y}")
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
+            self.cmd_vel_pub.publish(cmd)
+            self.goal_reached = True
+            return
 
         # Primera etapa: Rotar hacia el ángulo deseado
         if abs(alpha) > 0.1:  # Tolerancia para la rotación

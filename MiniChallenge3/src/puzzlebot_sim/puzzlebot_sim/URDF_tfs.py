@@ -13,20 +13,27 @@ class URDF_TFS(Node):
     def __init__(self):
         super().__init__('URDF_tfs')
 
+        self.declare_parameter('x0', 0.0)
+        self.declare_parameter('y0', 0.0)
+        self.declare_parameter('theta0', 0.0)
+
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
-        self.joint_pub = self.create_publisher(JointState, '/joint_states', 10)
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.wl_sub = self.create_subscription(Float32, '/wl', self.wl_callback, 10)
-        self.wr_sub = self.create_subscription(Float32, '/wr', self.wr_callback, 10)
+        self.joint_pub = self.create_publisher(JointState, 'joint_states', 10)
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
+        self.wr_sub = self.create_subscription(Float32, 'wr', self.wr_callback, 10)
 
-        self.x = 0.0
-        self.y = 0.0
+        self.x = self.get_parameter('x0').value
+        self.y = self.get_parameter('y0').value
+
+        theta0 = self.get_parameter('theta0').value
+        self.ns_prefix = self.get_namespace().strip('/')
 
         self.qx = 0.0
         self.qy = 0.0
-        self.qz = 0.0
-        self.qw = 1.0
+        self.qz = math.sin(theta0 / 2.0)
+        self.qw = math.cos(theta0 / 2.0)
 
         self.wr = 0.0
         self.wl = 0.0
@@ -38,13 +45,18 @@ class URDF_TFS(Node):
 
         self.publish_static_tf()
         self.timer = self.create_timer(0.02, self.update_visualisation)
+
+    def frame_id(self, name):
+        if self.ns_prefix:
+            return f'{self.ns_prefix}/{name}'
+        return name
         
     def publish_static_tf(self):
         t = TransformStamped()
 
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'map'
-        t.child_frame_id = 'odom'
+        t.header.frame_id = self.frame_id('map')
+        t.child_frame_id = self.frame_id('odom')
 
         t.transform.translation.x = 0.0
         t.transform.translation.y = 0.0
@@ -61,8 +73,8 @@ class URDF_TFS(Node):
         t = TransformStamped()
 
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'odom'
-        t.child_frame_id = 'base_footprint'
+        t.header.frame_id = self.frame_id('odom')
+        t.child_frame_id = self.frame_id('base_footprint')
 
         t.transform.translation.x = self.x
         t.transform.translation.y = self.y
