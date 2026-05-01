@@ -14,15 +14,21 @@ class Localisation(Node):
         self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
+        self.declare_parameter('initial_x', 0.0)
+        self.declare_parameter('initial_y', 0.0)
+        self.declare_parameter('initial_theta', 0.0)
+        self.declare_parameter('tf_prefix', '')
+
         self.r = 0.05
         self.l = 0.19
 
         self.wr = 0.0
         self.wl = 0.0
 
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        self.x = self.get_parameter('initial_x').value
+        self.y = self.get_parameter('initial_y').value
+        self.theta = self.get_parameter('initial_theta').value
+        self.tf_prefix = self.get_parameter('tf_prefix').value
 
         self.v = 0.0
         self.w = 0.0
@@ -53,8 +59,8 @@ class Localisation(Node):
         odom_msg = Odometry()
 
         odom_msg.header.stamp = self.get_clock().now().to_msg()
-        odom_msg.header.frame_id = 'odom'
-        odom_msg.child_frame_id = 'base_footprint'
+        odom_msg.header.frame_id = f'{self.tf_prefix}/odom'
+        odom_msg.child_frame_id = f'{self.tf_prefix}/base_footprint'
 
         odom_msg.pose.pose.position.x = self.x
         odom_msg.pose.pose.position.y = self.y

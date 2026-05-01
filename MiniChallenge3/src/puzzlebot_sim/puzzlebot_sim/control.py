@@ -16,22 +16,30 @@ class Control(Node):
         self.declare_parameter('v_max', 0.5)
         self.declare_parameter('w_max', 2.0)
         self.declare_parameter('goal_tolerance', 0.05)
+        self.declare_parameter('offset_x', 0.0)
+        self.declare_parameter('offset_y', 0.0)
 
         self.k_rho = self.get_parameter('k_rho').value
         self.k_alpha = self.get_parameter('k_alpha').value
         self.v_max = self.get_parameter('v_max').value
         self.w_max = self.get_parameter('w_max').value
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        offset_x = self.get_parameter('offset_x').value
+        offset_y = self.get_parameter('offset_y').value
 
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
 
         self.x = 0.0
         self.y = 0.0
         self.theta = 0.0
 
-        # Lista de objetivos (ruta en forma de triángulo)
-        self.goals = [(2.0, 0.0), (2.0, 2.0), (0.0, 0.0)]
+        self.goals = [
+            (offset_x + 1.0, offset_y + 0.0),
+            (offset_x + 1.0, offset_y + 1.0),
+            (offset_x + 0.0, offset_y + 0.0)
+        ]
+
         self.current_goal_index = 0
         self.goal_x, self.goal_y = self.goals[self.current_goal_index]
 
