@@ -16,6 +16,7 @@ setup(
         ('share/puzzlebot_sim/launch', ['launch/display.launch.py']),
         ('share/puzzlebot_sim/launch', ['launch/combined.launch.py']),
         ('share/puzzlebot_sim/launch', ['launch/multi_robot.launch.py']),
+        ('share/puzzlebot_sim/launch', ['launch/covariance_test.launch.py']),
         ('share/puzzlebot_sim/rviz', ['rviz/setup.rviz']),
         
     ],

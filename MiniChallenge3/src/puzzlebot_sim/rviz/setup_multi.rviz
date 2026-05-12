@@ -7,9 +7,9 @@ Panels:
         - /Global Options1
         - /Status1
         - /TF1
+        - /RobotModel1
         - /RobotModel1/Description Topic1
-        - /Odometry1
-        - /Odometry1/Covariance1
+        - /RobotModel2
       Splitter Ratio: 0.5
     Tree Height: 839
   - Class: rviz_common/Selection
@@ -56,19 +56,31 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_footprint:
-          Value: true
-        base_link:
-          Value: true
-        caster:
-          Value: true
         map:
           Value: true
-        odom:
+        robot1/base_footprint:
           Value: true
-        wheel_l:
+        robot1/base_link:
           Value: true
-        wheel_r:
+        robot1/caster:
+          Value: true
+        robot1/odom:
+          Value: true
+        robot1/wheel_l:
+          Value: true
+        robot1/wheel_r:
+          Value: true
+        robot2/base_footprint:
+          Value: true
+        robot2/base_link:
+          Value: true
+        robot2/caster:
+          Value: true
+        robot2/odom:
+          Value: true
+        robot2/wheel_l:
+          Value: true
+        robot2/wheel_r:
           Value: true
       Marker Scale: 1
       Name: TF
@@ -77,14 +89,23 @@ Visualization Manager:
       Show Names: false
       Tree:
         map:
-          odom:
-            base_footprint:
-              base_link:
-                caster:
+          robot1/odom:
+            robot1/base_footprint:
+              robot1/base_link:
+                robot1/caster:
                   {}
-                wheel_l:
+                robot1/wheel_l:
                   {}
-                wheel_r:
+                robot1/wheel_r:
+                  {}
+          robot2/odom:
+            robot2/base_footprint:
+              robot2/base_link:
+                robot2/caster:
+                  {}
+                robot2/wheel_l:
+                  {}
+                robot2/wheel_r:
                   {}
       Update Interval: 0
       Value: true
@@ -98,7 +119,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /robot_description
+        Value: /robot1/robot_description
       Enabled: true
       Links:
         All Links Enabled: true
@@ -134,53 +155,64 @@ Visualization Manager:
         Inertia: false
         Mass: false
       Name: RobotModel
-      TF Prefix: ""
+      TF Prefix: robot1
       Update Interval: 0
       Value: true
       Visual Enabled: true
-    - Angle Tolerance: 0.10000000149011612
-      Class: rviz_default_plugins/Odometry
-      Covariance:
-        Orientation:
-          Alpha: 0.5
-          Color: 255; 255; 127
-          Color Style: Unique
-          Frame: Local
-          Offset: 1
-          Scale: 1
-          Value: true
-        Position:
-          Alpha: 0.30000001192092896
-          Color: 204; 51; 204
-          Scale: 1
-          Value: true
-        Value: true
-      Enabled: true
-      Keep: 100
-      Name: Odometry
-      Position Tolerance: 0.10000000149011612
-      Shape:
-        Alpha: 1
-        Axes Length: 1
-        Axes Radius: 0.10000000149011612
-        Color: 255; 25; 0
-        Head Length: 0.30000001192092896
-        Head Radius: 0.10000000149011612
-        Shaft Length: 1
-        Shaft Radius: 0.05000000074505806
-        Value: Arrow
-      Topic:
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /odom
+        Value: /robot2/robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_footprint:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        caster:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wheel_l:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        wheel_r:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Mass Properties:
+        Inertia: false
+        Mass: false
+      Name: RobotModel
+      TF Prefix: robot2
+      Update Interval: 0
       Value: true
+      Visual Enabled: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: robot1/odom
     Frame Rate: 30
   Name: root
   Tools:
@@ -223,25 +255,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.9708845615386963
+      Distance: 3.848282814025879
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.8142604827880859
-        Y: -0.007753223180770874
-        Z: 0.4604099690914154
+        X: 0.8370283246040344
+        Y: 0.5557081699371338
+        Z: 0.42827725410461426
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5603979825973511
+      Pitch: 0.20039841532707214
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 6.278570652008057
+      Yaw: 4.153534889221191
     Saved: ~
 Window Geometry:
   Displays:
