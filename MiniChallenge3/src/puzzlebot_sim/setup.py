@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'puzzlebot_sim'
 
@@ -10,27 +12,35 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/puzzlebot_sim/meshes', ['meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl', 
-                                        'meshes/Puzzlebot_Caster_Wheel.stl', 'meshes/Puzzlebot_Wheel.stl']),
-        ('share/puzzlebot_sim/urdf', ['urdf/puzzlebot.urdf']),
-        ('share/puzzlebot_sim/launch', ['launch/display.launch.py']),
-        ('share/puzzlebot_sim/launch', ['launch/combined.launch.py']),
-        ('share/puzzlebot_sim/launch', ['launch/robot.launch.py']),
+        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*launch.[pxy][yma]*'))),
+        (os.path.join('share', package_name, 'config'), glob(os.path.join('config', '*.[yma]*'))),
+        (os.path.join('share', package_name, 'rviz'), glob(os.path.join('rviz', '*.rviz'))),
+        (os.path.join('share', package_name, 'meshes'), glob(os.path.join('meshes', '*.stl'))),
+        (os.path.join('share', package_name, 'urdf'), glob(os.path.join('urdf', '*.urdf'))),
+        (os.path.join('share', package_name, 'urdf'), glob(os.path.join('urdf', '*.xacro'))),
+        (os.path.join('share', package_name, 'worlds'), glob(os.path.join('worlds', '*.world'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='danieldrg',
-    maintainer_email='dreggam@gmail.com',
+    maintainer='aaraizae',
+    maintainer_email='aataizae@hotmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
-    tests_require=['pytest'],
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     entry_points={
         'console_scripts': [
-            'robot_markers = puzzlebot_sim.robot_markers:main',
-            'URDF_tfs= puzzlebot_sim.URDF_tfs:main',
-            'kinematic_model = puzzlebot_sim.kinematic_model:main',
-            'localisation = puzzlebot_sim.localisation:main',
-            'control = puzzlebot_sim.control:main',
+            'Minichallenge1 = puzzlebot_sim.Minichallenge1:main',
+            'sim_node = puzzlebot_sim.system_simulator:main',
+            'loc_node = puzzlebot_sim.pose_estimator:main',
+            'ctrl_node = puzzlebot_sim.velocity_manager:main',
+            'traj_node = puzzlebot_sim.trajectory_node:main',
+            'bug0_node = puzzlebot_sim.bug0_reactive:main',
+            'bug2_node = puzzlebot_sim.bug2_reactive:main',
+            'clean_spawn = puzzlebot_sim.spawn_cleanup:main',
         ],
     },
 )
