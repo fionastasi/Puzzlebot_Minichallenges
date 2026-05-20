@@ -17,6 +17,7 @@ setup(
         ('share/puzzlebot_sim/launch', ['launch/combined.launch.py']),
         ('share/puzzlebot_sim/launch', ['launch/multi_robot.launch.py']),
         ('share/puzzlebot_sim/launch', ['launch/covariance_test.launch.py']),
+        ('share/puzzlebot_sim/launch', ['launch/bug0.launch.py']),
         ('share/puzzlebot_sim/rviz', ['rviz/setup.rviz']),
         
     ],
@@ -34,6 +35,7 @@ setup(
             'kinematic_model = puzzlebot_sim.kinematic_model:main',
             'localisation = puzzlebot_sim.localisation:main',
             'control = puzzlebot_sim.control:main',
+            'bug0 = puzzlebot_sim.bug0:main',
         ],
     },
 )
