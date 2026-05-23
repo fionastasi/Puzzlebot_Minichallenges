@@ -1,9 +1,7 @@
 import rclpy
 from rclpy.node import Node
-
-from std_msgs.msg import Float32
 from nav_msgs.msg import Odometry
-
+from sensor_msgs.msg import JointState # <--- IMPORTANTE: Importamos el nuevo tipo de mensaje
 import math
 import numpy as np
 
@@ -11,8 +9,9 @@ class Localisation(Node):
 
     def __init__(self):
         super().__init__('localisation')
-        self.wr_sub = self.create_subscription(Float32, 'wr', self.wr_callback, 10)
-        self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
+        
+        # Nos suscribimos al tópico estándar de Gazebo para las articulaciones
+        self.joint_sub = self.create_subscription(JointState, 'joint_states', self.joint_callback, 10)
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
         self.declare_parameter('initial_x', 0.0)
@@ -42,6 +41,16 @@ class Localisation(Node):
         self.dt = 0.02
         self.timer = self.create_timer(self.dt, self.update_localisation)
 
+    # NUEVO CALLBACK: Extrae la velocidad (rad/s) de las llantas desde el JointState
+    def joint_callback(self, msg):
+        try:
+            idx_r = msg.name.index('wheel_r_joint')
+            idx_l = msg.name.index('wheel_l_joint')
+            self.wr = msg.velocity[idx_r]
+            self.wl = msg.velocity[idx_l]
+        except ValueError:
+            pass # Si el mensaje no trae las ruedas, lo ignoramos
+
     def propagate_covariance(self):
         delta_d = self.v * self.dt
         delta_theta = self.w * self.dt
@@ -64,12 +73,6 @@ class Localisation(Node):
         ])
 
         self.sigma = H @ self.sigma @ H.T + Q
-
-    def wr_callback(self, msg):
-        self.wr = msg.data
-
-    def wl_callback(self, msg):
-        self.wl = msg.data
     
     def compute_robot_velocities(self):
         self.v = self.r * (self.wr + self.wl) / 2.0
