@@ -37,9 +37,9 @@ class Bug2Node(Node):
         self.start_y = 0.0
         
         self.hit_distance = float('inf') 
-        self.left_m_line = False # Bandera anti-efecto escalera
-        self.hit_x = 0.0  # <-- AGREGA ESTA
-        self.hit_y = 0.0  # <-- AGREGA ESTA
+        self.left_m_line = False  # Indicador de si la línea M ha sido cruzada
+        self.hit_x = 0.0  # Coordenada X del punto de impacto
+        self.hit_y = 0.0  # Coordenada Y del punto de impacto
         
         self.goal_tolerance = 0.15 
         self.d_thresh = 0.45  
@@ -47,15 +47,15 @@ class Bug2Node(Node):
         
         self.k_rho = 0.6
         self.k_alpha = 1.5
-        self.v_max = 0.2  # Suave para no derrapar
+        self.v_max = 0.2  # Velocidad lineal máxima
         self.w_max = 0.6  
 
         self.regions = {
             'front': 10.0, 'fleft': 10.0, 'left': 10.0, 'right': 10.0, 'fright': 10.0,
         }
 
-        self.create_timer(0.05, self.control_loop) # 20 Hz para pensar más rápido
-        self.get_logger().info("Nodo BUG 2 inicializado. Esperando meta en /goal...") 
+        self.create_timer(0.05, self.control_loop)  # Ejecuta el bucle de control a 20 Hz
+        self.get_logger().info("Nodo Bug2 inicializado. Esperando meta en /goal...") 
 
     def normalize_angle(self, angle):
         while angle > math.pi: angle -= 2.0 * math.pi
@@ -92,7 +92,7 @@ class Bug2Node(Node):
 
         if dist_to_goal < self.goal_tolerance:
             self.change_state("STOP")
-            self.get_logger().info('¡Meta alcanzada exitosamente con Bug 2!')
+            self.get_logger().info('Meta alcanzada. Deteniendo Bug2.')
             self.cmd_pub.publish(Twist()) 
             self.goal_received = False 
             return
@@ -101,27 +101,27 @@ class Bug2Node(Node):
         if self.state == "GO_TO_GOAL":
             if self.regions['front'] < self.d_thresh and abs(err_theta) < 0.5:
                 self.hit_distance = dist_to_goal
-                # Guardamos la posición exacta del impacto
+                # Registra la posición del punto de impacto
                 self.hit_x = self.x
                 self.hit_y = self.y
-                self.get_logger().info(f'¡Hit Point! Registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) a {self.hit_distance:.2f}m.')
+                self.get_logger().info(f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) a {self.hit_distance:.2f} m.')
                 self.change_state("WALL_FOLLOWING")
                 
         elif self.state == "WALL_FOLLOWING":
             dist_m_line = self.distance_to_m_line()
-            # Calculamos la distancia euclidiana actual hacia el punto donde chocamos
+            # Distancia actual hasta el punto de impacto
             dist_to_hit = math.sqrt((self.x - self.hit_x)**2 + (self.y - self.hit_y)**2)
             
-            # CONDICIÓN DE SALIDA ULTRA-ROBUSTA:
-            # 1. Estamos sobre la línea M de nuevo
-            # 2. Estamos más cerca de la meta que al inicio del choque
-            # 3. Ya nos alejamos al menos 0.40m del punto donde chocamos originalmente
+            # Condiciones de salida del seguimiento de pared:
+            # 1. El robot vuelve a la línea M
+            # 2. Está más cerca de la meta que en el momento del impacto
+            # 3. Se ha alejado al menos 0.40 m del punto de impacto
             if dist_m_line < self.m_line_tolerance and dist_to_goal < (self.hit_distance - 0.15) and dist_to_hit > 0.40:
-                self.get_logger().info(f'¡Línea M interceptada a {dist_to_goal:.2f}m! Abandonando pared con éxito...')
+                self.get_logger().info(f'Línea M interceptada a {dist_to_goal:.2f} m. Cambio a GO_TO_GOAL.')
                 self.change_state("GO_TO_GOAL")
 
         # ---------------- ACCIONES DE ESTADO ---------------- #
-        # IMPORTANTE: Iniciamos con "if" para romper la cadena anterior y que sea ejecutable
+        # Evalúa el estado actual para seleccionar la acción de control correspondiente
         if self.state == "GO_TO_GOAL":
             if abs(err_theta) > 0.15:  
                 msg.linear.x = 0.0  
@@ -131,17 +131,17 @@ class Bug2Node(Node):
                 msg.angular.z = 0.0  
                 
         elif self.state == "WALL_FOLLOWING":
-            # 1. ¡PARED ENFRENTE! Frenamos en seco y giramos a la izquierda rápido
+            # 1. Objeto frontal detectado: detiene y gira a la izquierda
             if self.regions['front'] < self.d_thresh:
                 msg.linear.x = 0.0
                 msg.angular.z = 0.6
             
-            # 2. PARED EN LA DIAGONAL: Giramos a la izquierda para alinearnos en paralelo
+            # 2. Objeto en diagonal frontal-derecha: gira a la izquierda para mantener paralelismo
             elif self.regions['fright'] < self.d_thresh:
                 msg.linear.x = 0.08
                 msg.angular.z = 0.4
             
-            # 3. PARED DETECTADA A LA DERECHA (Nuestra guía)
+            # 3. Pared a la derecha: regula la orientación y la velocidad de avance
             elif self.regions['right'] < self.d_thresh:
                 if self.regions['right'] < (self.d_thresh - 0.15):
                     msg.linear.x = 0.12
@@ -150,7 +150,7 @@ class Bug2Node(Node):
                     msg.linear.x = 0.15
                     msg.angular.z = -0.05  
             
-            # 4. ¡PERDIMOS LA PARED O LLEGAMOS A UNA ESQUINA!
+            # 4. Sin referencia de pared: recupera la trayectoria con un giro suave
             else:
                 msg.linear.x = 0.04   
                 msg.angular.z = -0.6  
@@ -191,7 +191,7 @@ class Bug2Node(Node):
                 self.regions = {
                     'right':  min(clean_ranges[50:110] + [10.0]),   # Aprox -130° a -70°
                     'fright': min(clean_ranges[110:160] + [10.0]),  # Aprox -70° a -20°
-                    'front':  min(clean_ranges[160:200] + [10.0]),  # Aprox -20° a +20° (¡Al fin ve hacia adelante!)
+                    'front':  min(clean_ranges[160:200] + [10.0]),  # Aprox -20° a +20° (frente del robot)
                     'fleft':  min(clean_ranges[200:250] + [10.0]),  # Aprox +20° a +70°
                     'left':   min(clean_ranges[250:310] + [10.0]),  # Aprox +70° a +130°
                 }

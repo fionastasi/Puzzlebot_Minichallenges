@@ -36,7 +36,7 @@ class Bug0Node(Node):
         self.goal_tolerance = 0.15 
         self.d_thresh = 0.45  
         
-        # Control suave hacia la meta
+        # Control proporcional hacia la meta
         self.k_rho = 0.6
         self.k_alpha = 1.5
         self.v_max = 0.2   # Velocidad lineal máxima controlada
@@ -48,7 +48,7 @@ class Bug0Node(Node):
             'front': 10.0, 'fleft': 10.0, 'left': 10.0, 'right': 10.0, 'fright': 10.0,
         }
 
-        # ¡MEJORA 1! Pensar a 20Hz (0.05s) para evitar desfases en las esquinas
+        # Ejecuta el bucle de control a 20 Hz para reducir desfases durante las maniobras
         self.create_timer(0.05, self.control_loop) 
         self.get_logger().info("Nodo Bug 0 inicializado. Esperando meta en /goal...") 
 
@@ -65,18 +65,17 @@ class Bug0Node(Node):
             self.get_logger().info(f'Cambiando de estado: {self.state} -> {new_state}')
             self.state = new_state
 
-    # EL SECRETO DE BUG 0: Mirar con precisión matemática hacia la meta
+    # Evalúa si la trayectoria hacia la meta está libre de obstáculos
     def is_path_to_goal_clear(self, err_theta):
-        # Como nuestro LiDAR mapeado es 360° real, indexamos directo usando grados
-        # El índice 180 es el frente exacto (0 grados relativos)
+        # El sensor LiDAR se indexa en 360° y el frente corresponde al índice 180
         idx = 180 + int(math.degrees(err_theta))
         idx = self.clamp(idx, 0, 359)
         
-        # Revisamos un cono de ±15 grados hacia donde apunta la meta
+        # Evalúa el sector de ±15 grados respecto al vector hacia la meta
         inicio = max(0, idx - 15)
         fin = min(359, idx + 15)
         
-        # Si la lectura mínima en ese cono supera el umbral, el camino es seguro
+        # Si la lectura mínima en el sector excede el umbral, la ruta se considera libre
         if min(self.clean_ranges[inicio:fin]) > (self.d_thresh + 0.15):
             return True
         return False
@@ -93,7 +92,7 @@ class Bug0Node(Node):
 
         if dist_to_goal < self.goal_tolerance:
             self.change_state("STOP")
-            self.get_logger().info('¡Meta alcanzada exitosamente con Bug 0!')
+            self.get_logger().info('Meta alcanzada con Bug 0.')
             self.cmd_pub.publish(Twist()) 
             self.goal_received = False 
             return
@@ -104,13 +103,12 @@ class Bug0Node(Node):
                 self.change_state("WALL_FOLLOWING")
                 
         elif self.state == "WALL_FOLLOWING":
-            # FILTRO ANTICHATTERING: Camino libre hacia la meta Y el frente despejado
+            # Condición de retorno a GO_TO_GOAL cuando la ruta hacia la meta se libera
             if self.is_path_to_goal_clear(err_theta) and self.regions['front'] > (self.d_thresh + 0.05):
-                self.get_logger().info('¡Camino a la meta despejado de verdad! Rompiendo seguimiento...')
-                self.change_state("GO_TO_GOAL")
+                self.get_logger().info('Ruta a la meta despejada. Cambiando a GO_TO_GOAL.')
 
         # ---------------- ACCIONES DE ESTADO ---------------- #
-        # Separados con un "if" independiente para evitar bloqueos de velocidad
+        # Estructura de control independiente para evitar bloqueos de velocidad
         if self.state == "GO_TO_GOAL":
             if abs(err_theta) > 0.15:  
                 msg.linear.x = 0.0  
@@ -120,29 +118,29 @@ class Bug0Node(Node):
                 msg.angular.z = 0.0  
                 
         elif self.state == "WALL_FOLLOWING":
-            # ¡MEJORA 2! Algoritmo de seguimiento con micro-ajustes heredado de Bug 2
-            # 1. ¡PARED ENFRENTE! Frenamos y giramos rápido a la izquierda
+            # Algoritmo de seguimiento con ajustes basados en Bug 2
+            # 1. Pared frontal: detiene y gira a la izquierda
             if self.regions['front'] < self.d_thresh:
                 msg.linear.x = 0.0
                 msg.angular.z = 0.6
             
-            # 2. PARED EN LA DIAGONAL: Nos alineamos en paralelo
+            # 2. Pared diagonal: alinea la trayectoria en paralelo
             elif self.regions['fright'] < self.d_thresh:
                 msg.linear.x = 0.08
                 msg.angular.z = 0.4
             
-            # 3. PARED DETECTADA A LA DERECHA
+            # 3. Pared lateral derecha detectada
             elif self.regions['right'] < self.d_thresh:
-                # Muy pegados: Nos corregimos sutilmente a la izquierda
+                # Corrección suave cuando la distancia es demasiado corta
                 if self.regions['right'] < (self.d_thresh - 0.15):
                     msg.linear.x = 0.12
                     msg.angular.z = 0.2
-                # Distancia ideal: Avanzamos inclinándonos levemente a la derecha para no perderla
+                # Distancia adecuada: mantiene el seguimiento de la pared
                 else:
                     msg.linear.x = 0.15
                     msg.angular.z = -0.05  
             
-            # 4. ESQUINA O PÉRDIDA DE PARED: Giro de pivote cerrado a la derecha
+            # 4. Esquina o pérdida de pared: gira a la derecha para recuperar el trayecto
             else:
                 msg.linear.x = 0.04   
                 msg.angular.z = -0.6  
@@ -174,7 +172,7 @@ class Bug0Node(Node):
         
         self.clean_ranges = clean_ranges
         
-        # ¡MEJORA 3! Indexación del LiDAR corregida para el formato físico real del robot
+        # Actualiza la indexación del LiDAR para el formato de 360° del robot
         self.regions = {
             'right':  min(clean_ranges[50:110] + [10.0]),   
             'fright': min(clean_ranges[110:160] + [10.0]),  
