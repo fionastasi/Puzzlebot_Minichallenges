@@ -43,10 +43,10 @@ class Bug0Node(Node):
         self.w_max = 1.0
 
         # Constantes de Wall Following
-        self.v_wall = 0.2     
-        self.kw_wall = 1.9    
-        self.d_start = 0.6    # Distancia para empezar a esquivar [m]
-        self.d_clear = 0.8    # Distancia para considerar que el camino está libre [m]
+        self.v_wall = 0.1     
+        self.kw_wall = 0.8    
+        self.d_start = 0.5    # Distancia para empezar a esquivar [m]
+        self.d_clear = 1.0    # Distancia para considerar que el camino está libre [m]
 
         self.cmd_vel = Twist() 
         timer_period = 0.05  # 20 Hz para control más suave
@@ -143,7 +143,7 @@ class Bug0Node(Node):
     def is_path_to_goal_clear(self, etheta):
         idx = int((etheta - self.lidar.angle_min) / self.lidar.angle_increment)
         if 0 <= idx < len(self.lidar.ranges):
-            margen_grados = 15
+            margen_grados = 25
             idx_margen = int(math.radians(margen_grados) / self.lidar.angle_increment)
             inicio = max(0, idx - idx_margen)
             fin = min(len(self.lidar.ranges) - 1, idx + idx_margen)
