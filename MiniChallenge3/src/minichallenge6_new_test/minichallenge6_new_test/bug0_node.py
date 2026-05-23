@@ -67,20 +67,16 @@ class Bug0Node(Node):
 
     # EL SECRETO DE BUG 0: Mirar con precisión matemática hacia la meta
     def is_path_to_goal_clear(self, err_theta):
-        # Si la meta está a nuestras espaldas (fuera del rango visual frontal del robot), falso.
-        if err_theta < -math.pi/2 or err_theta > math.pi/2:
-            return False
-            
-        # Convertimos el ángulo relativo de la meta en un índice del láser (0 a 359)
-        # Usamos math.pi para máxima precisión geométrica
-        idx = int((err_theta + math.pi/2) * (360.0 / math.pi))
+        # Como nuestro LiDAR mapeado es 360° real, indexamos directo usando grados
+        # El índice 180 es el frente exacto (0 grados relativos)
+        idx = 180 + int(math.degrees(err_theta))
         idx = self.clamp(idx, 0, 359)
         
-        # Revisamos un pequeño cono de seguridad de ±15 grados hacia la meta
+        # Revisamos un cono de ±15 grados hacia donde apunta la meta
         inicio = max(0, idx - 15)
         fin = min(359, idx + 15)
         
-        # Si no hay nada estorbando en esa dirección específica, ¡vía libre!
+        # Si la lectura mínima en ese cono supera el umbral, el camino es seguro
         if min(self.clean_ranges[inicio:fin]) > (self.d_thresh + 0.15):
             return True
         return False
@@ -104,14 +100,13 @@ class Bug0Node(Node):
 
         # ---------------- TRANSICIONES DE ESTADO ---------------- #
         if self.state == "GO_TO_GOAL":
-            # Si hay obstáculo al frente y estamos apuntando hacia la dirección de la meta
             if self.regions['front'] < self.d_thresh and abs(err_theta) < 0.5:
                 self.change_state("WALL_FOLLOWING")
                 
         elif self.state == "WALL_FOLLOWING":
-            # Bug 0 puro: Si la línea visual directa a la meta se libera, escapamos de la pared
-            if self.is_path_to_goal_clear(err_theta):
-                self.get_logger().info('¡Camino a la meta despejado! Rompiendo seguimiento de pared...')
+            # FILTRO ANTICHATTERING: Camino libre hacia la meta Y el frente despejado
+            if self.is_path_to_goal_clear(err_theta) and self.regions['front'] > (self.d_thresh + 0.05):
+                self.get_logger().info('¡Camino a la meta despejado de verdad! Rompiendo seguimiento...')
                 self.change_state("GO_TO_GOAL")
 
         # ---------------- ACCIONES DE ESTADO ---------------- #
