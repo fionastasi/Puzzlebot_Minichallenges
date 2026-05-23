@@ -39,20 +39,17 @@ class Bug0Node(Node):
         # Control suave hacia la meta
         self.k_rho = 0.6
         self.k_alpha = 1.5
-        self.v_max = 0.3 
-        self.w_max = 1.0
+        self.v_max = 0.2   # Velocidad lineal máxima controlada
+        self.w_max = 0.6   # Velocidad angular máxima para evitar derrapes
 
         self.clean_ranges = [10.0] * 360
 
         self.regions = {
-            'front': 10.0,
-            'fleft': 10.0,
-            'left': 10.0,
-            'right': 10.0,
-            'fright': 10.0,
+            'front': 10.0, 'fleft': 10.0, 'left': 10.0, 'right': 10.0, 'fright': 10.0,
         }
 
-        self.create_timer(0.1, self.control_loop) 
+        # ¡MEJORA 1! Pensar a 20Hz (0.05s) para evitar desfases en las esquinas
+        self.create_timer(0.05, self.control_loop) 
         self.get_logger().info("Nodo Bug 0 inicializado. Esperando meta en /goal...") 
 
     def normalize_angle(self, angle):
@@ -68,22 +65,23 @@ class Bug0Node(Node):
             self.get_logger().info(f'Cambiando de estado: {self.state} -> {new_state}')
             self.state = new_state
 
-    # EL SECRETO: Mirar de reojo hacia la meta
+    # EL SECRETO DE BUG 0: Mirar con precisión matemática hacia la meta
     def is_path_to_goal_clear(self, err_theta):
-        # Si la meta está a nuestras espaldas (fuera del láser de 180°), no podemos verla
-        if err_theta < -1.57 or err_theta > 1.57:
+        # Si la meta está a nuestras espaldas (fuera del rango visual frontal del robot), falso.
+        if err_theta < -math.pi/2 or err_theta > math.pi/2:
             return False
             
-        # Convertimos el ángulo de la meta en un índice del láser (0 a 359)
-        idx = int((err_theta + 1.5708) * (360 / 3.1416))
+        # Convertimos el ángulo relativo de la meta en un índice del láser (0 a 359)
+        # Usamos math.pi para máxima precisión geométrica
+        idx = int((err_theta + math.pi/2) * (360.0 / math.pi))
         idx = self.clamp(idx, 0, 359)
         
-        # Revisamos "de reojo" un pequeño cono de ±15 índices hacia donde está la meta
+        # Revisamos un pequeño cono de seguridad de ±15 grados hacia la meta
         inicio = max(0, idx - 15)
         fin = min(359, idx + 15)
         
-        # Si la distancia en esa dirección es mayor a nuestro umbral, ¡está libre!
-        if min(self.clean_ranges[inicio:fin]) > self.d_thresh + 0.15:
+        # Si no hay nada estorbando en esa dirección específica, ¡vía libre!
+        if min(self.clean_ranges[inicio:fin]) > (self.d_thresh + 0.15):
             return True
         return False
 
@@ -99,25 +97,25 @@ class Bug0Node(Node):
 
         if dist_to_goal < self.goal_tolerance:
             self.change_state("STOP")
-            self.get_logger().info('¡Meta alcanzada exitosamente!')
+            self.get_logger().info('¡Meta alcanzada exitosamente con Bug 0!')
             self.cmd_pub.publish(Twist()) 
             self.goal_received = False 
             return
 
         # ---------------- TRANSICIONES DE ESTADO ---------------- #
         if self.state == "GO_TO_GOAL":
-            # ¡EL FIX DEL CHATTERING!
-            # Solo activa Wall Following si hay un obstáculo enfrente Y además 
-            # ya estamos apuntando hacia la meta (err_theta pequeño).
-            if self.regions['front'] < self.d_thresh and abs(err_theta) < 0.35:
+            # Si hay obstáculo al frente y estamos apuntando hacia la dirección de la meta
+            if self.regions['front'] < self.d_thresh and abs(err_theta) < 0.5:
                 self.change_state("WALL_FOLLOWING")
                 
         elif self.state == "WALL_FOLLOWING":
-            # BUG 0 REAL: Si al mirar de reojo vemos que el camino a la meta está libre, vamos.
+            # Bug 0 puro: Si la línea visual directa a la meta se libera, escapamos de la pared
             if self.is_path_to_goal_clear(err_theta):
+                self.get_logger().info('¡Camino a la meta despejado! Rompiendo seguimiento de pared...')
                 self.change_state("GO_TO_GOAL")
 
         # ---------------- ACCIONES DE ESTADO ---------------- #
+        # Separados con un "if" independiente para evitar bloqueos de velocidad
         if self.state == "GO_TO_GOAL":
             if abs(err_theta) > 0.15:  
                 msg.linear.x = 0.0  
@@ -127,18 +125,32 @@ class Bug0Node(Node):
                 msg.angular.z = 0.0  
                 
         elif self.state == "WALL_FOLLOWING":
+            # ¡MEJORA 2! Algoritmo de seguimiento con micro-ajustes heredado de Bug 2
+            # 1. ¡PARED ENFRENTE! Frenamos y giramos rápido a la izquierda
             if self.regions['front'] < self.d_thresh:
                 msg.linear.x = 0.0
                 msg.angular.z = 0.6
+            
+            # 2. PARED EN LA DIAGONAL: Nos alineamos en paralelo
             elif self.regions['fright'] < self.d_thresh:
-                msg.linear.x = 0.15
-                msg.angular.z = 0.3
+                msg.linear.x = 0.08
+                msg.angular.z = 0.4
+            
+            # 3. PARED DETECTADA A LA DERECHA
             elif self.regions['right'] < self.d_thresh:
-                msg.linear.x = 0.2
-                msg.angular.z = 0.0
+                # Muy pegados: Nos corregimos sutilmente a la izquierda
+                if self.regions['right'] < (self.d_thresh - 0.15):
+                    msg.linear.x = 0.12
+                    msg.angular.z = 0.2
+                # Distancia ideal: Avanzamos inclinándonos levemente a la derecha para no perderla
+                else:
+                    msg.linear.x = 0.15
+                    msg.angular.z = -0.05  
+            
+            # 4. ESQUINA O PÉRDIDA DE PARED: Giro de pivote cerrado a la derecha
             else:
-                msg.linear.x = 0.15
-                msg.angular.z = -0.4
+                msg.linear.x = 0.04   
+                msg.angular.z = -0.6  
 
         self.cmd_pub.publish(msg)
 
@@ -153,6 +165,7 @@ class Bug0Node(Node):
         self.target_y = msg.y 
         self.goal_received = True 
         self.change_state("GO_TO_GOAL")
+        self.get_logger().info(f"Bug 0 Metarecibida: x={self.target_x}, y={self.target_y}")
 
     def scan_callback(self, msg): 
         clean_ranges = []
@@ -166,12 +179,13 @@ class Bug0Node(Node):
         
         self.clean_ranges = clean_ranges
         
+        # ¡MEJORA 3! Indexación del LiDAR corregida para el formato físico real del robot
         self.regions = {
-            'right':  min(clean_ranges[0:71]),    
-            'fright': min(clean_ranges[72:143]),  
-            'front':  min(clean_ranges[144:215]), 
-            'fleft':  min(clean_ranges[216:287]), 
-            'left':   min(clean_ranges[288:359]), 
+            'right':  min(clean_ranges[50:110] + [10.0]),   
+            'fright': min(clean_ranges[110:160] + [10.0]),  
+            'front':  min(clean_ranges[160:200] + [10.0]),  
+            'fleft':  min(clean_ranges[200:250] + [10.0]),  
+            'left':   min(clean_ranges[250:310] + [10.0]),  
         }
 
     def shutdown_function(self, signum, frame): 

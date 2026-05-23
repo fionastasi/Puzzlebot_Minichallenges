@@ -16,7 +16,7 @@ def generate_launch_description():
     local_gazebo_launch_path = os.path.join(pkg_share, 'launch', 'puzzlebot_gazebo.launch.py')
     
     # Ruta absoluta hacia tu mundo personalizado en la carpeta 'worlds'
-    world_file_path = os.path.join(pkg_share, 'worlds', 'demo_world.world')
+    world_file_path = os.path.join(pkg_share, 'worlds', 'demo_world2.world')
     
     #==========================================================================
     # 2. INCLUIR TU PROPIO LAUNCH DE GAZEBO
