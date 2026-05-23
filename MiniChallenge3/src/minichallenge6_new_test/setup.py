@@ -31,6 +31,7 @@ setup(
             "URDF_tfs = minichallenge6_new_test.URDF_tfs:main",
             "odometry_node = minichallenge6_new_test.odometry_node:main",
             "bug0_node = minichallenge6_new_test.bug0_node:main",
+            "bug2_node = minichallenge6_new_test.bug2_node:main",
         ],
     },
 )
