@@ -38,6 +38,8 @@ class Bug2Node(Node):
         
         self.hit_distance = float('inf') 
         self.left_m_line = False # Bandera anti-efecto escalera
+        self.hit_x = 0.0  # <-- AGREGA ESTA
+        self.hit_y = 0.0  # <-- AGREGA ESTA
         
         self.goal_tolerance = 0.15 
         self.d_thresh = 0.45  
@@ -95,24 +97,27 @@ class Bug2Node(Node):
             self.goal_received = False 
             return
 
-        # ---------------- TRANSICIONES DE ESTADO ---------------- #
+       # ---------------- TRANSICIONES DE ESTADO ---------------- #
         if self.state == "GO_TO_GOAL":
             if self.regions['front'] < self.d_thresh and abs(err_theta) < 0.5:
                 self.hit_distance = dist_to_goal
-                self.left_m_line = False 
-                self.get_logger().info(f'¡Hit Point! Registrado a {self.hit_distance:.2f}m.')
+                # Guardamos la posición exacta del impacto
+                self.hit_x = self.x
+                self.hit_y = self.y
+                self.get_logger().info(f'¡Hit Point! Registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) a {self.hit_distance:.2f}m.')
                 self.change_state("WALL_FOLLOWING")
                 
         elif self.state == "WALL_FOLLOWING":
             dist_m_line = self.distance_to_m_line()
+            # Calculamos la distancia euclidiana actual hacia el punto donde chocamos
+            dist_to_hit = math.sqrt((self.x - self.hit_x)**2 + (self.y - self.hit_y)**2)
             
-            # Se aumentó la sensibilidad (+ 0.05) para registrar el abandono de línea más rápido
-            if dist_m_line > (self.m_line_tolerance + 0.05):
-                self.left_m_line = True
-            
-            if self.left_m_line and dist_m_line < self.m_line_tolerance and dist_to_goal < (self.hit_distance - 0.10):
-                self.get_logger().info(f'¡Línea M interceptada a {dist_to_goal:.2f}m! Abandonando pared...')
-                self.left_m_line = False
+            # CONDICIÓN DE SALIDA ULTRA-ROBUSTA:
+            # 1. Estamos sobre la línea M de nuevo
+            # 2. Estamos más cerca de la meta que al inicio del choque
+            # 3. Ya nos alejamos al menos 0.40m del punto donde chocamos originalmente
+            if dist_m_line < self.m_line_tolerance and dist_to_goal < (self.hit_distance - 0.15) and dist_to_hit > 0.40:
+                self.get_logger().info(f'¡Línea M interceptada a {dist_to_goal:.2f}m! Abandonando pared con éxito...')
                 self.change_state("GO_TO_GOAL")
 
         # ---------------- ACCIONES DE ESTADO ---------------- #
