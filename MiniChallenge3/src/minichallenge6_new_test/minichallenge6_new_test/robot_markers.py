@@ -36,7 +36,7 @@ class Markers(Node):
 
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
-        marker.mesh_resource = "package://minichallenge5/meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl"
+        marker.mesh_resource = "package://minichallenge6_new_test/meshes/Puzzlebot_Jetson_Lidar_Edition_Base.stl"
         marker.mesh_use_embedded_materials = True
 
         marker.pose.position.x = 0.0
@@ -63,7 +63,7 @@ class Markers(Node):
 
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
-        marker.mesh_resource = "package://minichallenge5/meshes/Puzzlebot_Wheel.stl"
+        marker.mesh_resource = "package://minichallenge6_new_test/meshes/Puzzlebot_Wheel.stl"
         marker.mesh_use_embedded_materials = True
 
         marker.pose.orientation.x = 0.7071
@@ -93,7 +93,7 @@ class Markers(Node):
 
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
-        marker.mesh_resource = "package://minichallenge5/meshes/Puzzlebot_Wheel.stl"
+        marker.mesh_resource = "package://minichallenge6_new_test/meshes/Puzzlebot_Wheel.stl"
         marker.mesh_use_embedded_materials = True
 
         marker.pose.orientation.x = 0.7071
@@ -123,7 +123,7 @@ class Markers(Node):
 
         marker.type = Marker.MESH_RESOURCE
         marker.action = Marker.ADD
-        marker.mesh_resource = "package://minichallenge5/meshes/Puzzlebot_Caster_Wheel.stl"
+        marker.mesh_resource = "package://minichallenge6_new_test/meshes/Puzzlebot_Caster_Wheel.stl"
         marker.mesh_use_embedded_materials = True
 
         marker.pose.position.x = 0.0

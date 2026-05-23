@@ -114,7 +114,7 @@ class Bug2Node(Node):
             # 2. Salir de la pared si cruzamos la línea M Y estamos más cerca de la meta.
             # Quitamos el -0.05 estricto porque el derrape odómetrico nos perjudica. 
             # Pedimos simplemente que la distancia actual sea menor a la distancia de choque.
-            if self.left_m_line and dist_m_line < self.m_line_tolerance and dist_to_goal < self.hit_distance:
+            if self.left_m_line and dist_m_line < self.m_line_tolerance and dist_to_goal < (self.hit_distance - 0.10):
                 self.get_logger().info(f'¡Línea M interceptada a {dist_to_goal:.2f}m! Abandonando pared...')
                 self.left_m_line = False
                 self.change_state("GO_TO_GOAL")
@@ -129,22 +129,22 @@ class Bug2Node(Node):
                 msg.angular.z = 0.0  
                 
         elif self.state == "WALL_FOLLOWING":
-            # Reglas Robustas de Wall Following con reflejo anti-choque
+            # Redujimos un poco las velocidades angulares (z) para evitar derrapes bruscos
             if self.regions['front'] < 0.25:
                 msg.linear.x = 0.0
-                msg.angular.z = 0.8
+                msg.angular.z = 0.5  # Giro suave sobre su eje
             elif self.regions['front'] < self.d_thresh:
                 msg.linear.x = 0.0
-                msg.angular.z = 0.6
+                msg.angular.z = 0.4
             elif self.regions['fright'] < self.d_thresh:
-                msg.linear.x = 0.15
-                msg.angular.z = 0.3
+                msg.linear.x = 0.1
+                msg.angular.z = 0.2
             elif self.regions['right'] < self.d_thresh:
-                msg.linear.x = 0.2
+                msg.linear.x = 0.15 # Avanza recto siguiendo la pared
                 msg.angular.z = 0.0
             else:
-                msg.linear.x = 0.15
-                msg.angular.z = -0.4
+                msg.linear.x = 0.1
+                msg.angular.z = -0.3 # Busca la pared suavemente si la pierde
 
         self.cmd_pub.publish(msg)
 
@@ -173,22 +173,28 @@ class Bug2Node(Node):
             else:
                 clean_ranges.append(r)
         
-        # VISIÓN 360 GRADOS
-        # En ROS, 0° es el frente. Aumenta hacia la izquierda (CCW).
-        # Los índices negativos en Python leen el final de la lista (lado derecho).
-        if len(clean_ranges) > 0:
-            self.regions = {
-                # Frente: ±20 grados 
-                'front':  min(min(clean_ranges[0:20] + clean_ranges[-20:]), 10.0),
-                # Diagonal Izquierda: 21 a 75 grados
-                'fleft':  min(min(clean_ranges[21:75]), 10.0),
-                # Izquierda pura: 76 a 105 grados
-                'left':   min(min(clean_ranges[76:105]), 10.0),
-                # Derecha pura: -105 a -76 grados
-                'right':  min(min(clean_ranges[-105:-76]), 10.0),
-                # Diagonal Derecha: -75 a -21 grados
-                'fright': min(min(clean_ranges[-75:-21]), 10.0),
-            }
+        num_rays = len(clean_ranges)
+        
+        if num_rays > 0:
+            if num_rays >= 350: 
+                # LÓGICA PARA LIDAR 360 GRADOS
+                self.regions = {
+                    'front':  min(min(clean_ranges[0:20] + clean_ranges[-20:]), 10.0),
+                    'fleft':  min(min(clean_ranges[21:75]), 10.0),
+                    'left':   min(min(clean_ranges[76:105]), 10.0),
+                    'right':  min(min(clean_ranges[-105:-76]), 10.0),
+                    'fright': min(min(clean_ranges[-75:-21]), 10.0),
+                }
+            else: 
+                # LÓGICA PARA LIDAR 180 GRADOS (El índice del medio es el frente real)
+                # Agregamos [+ [10.0]] para evitar errores si la lista viene vacía en algún segmento
+                self.regions = {
+                    'right':  min(clean_ranges[0:35] + [10.0]),      # -90° a -55°
+                    'fright': min(clean_ranges[36:71] + [10.0]),     # -55° a -19°
+                    'front':  min(clean_ranges[72:107] + [10.0]),    # -19° a +19° (¡El verdadero frente!)
+                    'fleft':  min(clean_ranges[108:143] + [10.0]),   # +19° a +55°
+                    'left':   min(clean_ranges[144:179] + [10.0]),   # +55° a +90°
+                }
 
     def shutdown_function(self, signum, frame): 
         self.cmd_pub.publish(Twist()) 

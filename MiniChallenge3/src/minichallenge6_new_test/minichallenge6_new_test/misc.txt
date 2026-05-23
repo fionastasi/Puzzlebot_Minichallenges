@@ -1,0 +1,4 @@
+ros2 topic pub --once /goal geometry_msgs/msg/Pose2D "{x: 7.0, y: 0.0, theta: 0.0}"
+
+
+ros2 launch minichallenge6_new_test challengeBug2.launch.py
