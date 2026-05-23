@@ -50,12 +50,15 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", algo, "' == 'bug1'"]))
     )
 
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        output='screen',
-        parameters=[{'use_sim_time': True}]
+    # Bridge Gazebo transport topics to ROS 2 (optional, only if needed)
+    gazebo_ros_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/model/robot1/pose@geometry_msgs/msg/TransformStamped@ignition.msgs.Pose',
+            '/model/robot1/odometry@nav_msgs/msg/Odometry@ignition.msgs.OdometryWithCovariance',
+        ],
+        output='screen'
     )
 
     return LaunchDescription([
@@ -64,5 +67,6 @@ def generate_launch_description():
         spawn_robot,
         bug0_node,
         bug1_node,
-        rviz_node
+        # Uncomment the line below if Gazebo topics are not appearing in ROS 2
+        # gazebo_ros_bridge,
     ])

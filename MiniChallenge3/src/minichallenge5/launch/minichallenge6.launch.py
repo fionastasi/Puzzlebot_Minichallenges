@@ -13,6 +13,13 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_path, 'launch', 'display.launch.py')
         )
+    , launch_arguments={'use_sim_time': 'true'}.items()
+    )
+
+    gazebo_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_path, 'launch', 'gazebo.launch.py')
+        )
     )
 
     kinematic_model_node = Node(
@@ -30,6 +37,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        gazebo_launch,
         display_launch,
         kinematic_model_node,
         localisation_node
