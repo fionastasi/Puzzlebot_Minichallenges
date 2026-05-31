@@ -1,7 +1,9 @@
 import rclpy
+from rclpy import qos
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState # <--- IMPORTANTE: Importamos el nuevo tipo de mensaje
+from std_msgs.msg import Float32
 import math
 import numpy as np
 
@@ -10,8 +12,13 @@ class Localisation(Node):
     def __init__(self):
         super().__init__('localisation')
         
-        # Nos suscribimos al tópico estándar de Gazebo para las articulaciones
+        # Gazebo publica joint_states; el Puzzlebot fisico publica velocidades de encoder.
         self.joint_sub = self.create_subscription(JointState, 'joint_states', self.joint_callback, 10)
+        self.create_subscription(JointState, 'joint_states', self.joint_callback, qos.qos_profile_sensor_data)
+        self.wr_sub = self.create_subscription(Float32, 'VelocityEncR', self.wr_callback, 10)
+        self.create_subscription(Float32, 'VelocityEncR', self.wr_callback, qos.qos_profile_sensor_data)
+        self.wl_sub = self.create_subscription(Float32, 'VelocityEncL', self.wl_callback, 10)
+        self.create_subscription(Float32, 'VelocityEncL', self.wl_callback, qos.qos_profile_sensor_data)
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
         self.declare_parameter('initial_x', 0.0)
@@ -20,12 +27,17 @@ class Localisation(Node):
         self.declare_parameter('tf_prefix', '')
         self.declare_parameter('kr', 0.01)
         self.declare_parameter('kl', 0.01)
+        self.declare_parameter('encoder_timeout', 1.0)
 
         self.r = 0.05
         self.l = 0.19
 
         self.wr = 0.0
         self.wl = 0.0
+        self.last_wr_time = None
+        self.last_wl_time = None
+        self.last_joint_time = None
+        self.last_diagnostic_time = self.get_clock().now()
 
         self.x = self.get_parameter('initial_x').value
         self.y = self.get_parameter('initial_y').value
@@ -33,6 +45,7 @@ class Localisation(Node):
         self.tf_prefix = self.get_parameter('tf_prefix').value
         self.kr = self.get_parameter('kr').value
         self.kl = self.get_parameter('kl').value
+        self.encoder_timeout = self.get_parameter('encoder_timeout').value
 
         self.v = 0.0
         self.w = 0.0
@@ -48,8 +61,17 @@ class Localisation(Node):
             idx_l = msg.name.index('wheel_l_joint')
             self.wr = msg.velocity[idx_r]
             self.wl = msg.velocity[idx_l]
+            self.last_joint_time = self.get_clock().now()
         except ValueError:
             pass # Si el mensaje no trae las ruedas, lo ignoramos
+
+    def wr_callback(self, msg):
+        self.wr = msg.data
+        self.last_wr_time = self.get_clock().now()
+
+    def wl_callback(self, msg):
+        self.wl = msg.data
+        self.last_wl_time = self.get_clock().now()
 
     def propagate_covariance(self):
         delta_d = self.v * self.dt
@@ -91,8 +113,12 @@ class Localisation(Node):
         odom_msg = Odometry()
 
         odom_msg.header.stamp = self.get_clock().now().to_msg()
-        odom_msg.header.frame_id = f'{self.tf_prefix}/odom'
-        odom_msg.child_frame_id = f'{self.tf_prefix}/base_footprint'
+        if self.tf_prefix:
+            odom_msg.header.frame_id = f'{self.tf_prefix}/odom'
+            odom_msg.child_frame_id = f'{self.tf_prefix}/base_footprint'
+        else:
+            odom_msg.header.frame_id = 'odom'
+            odom_msg.child_frame_id = 'base_footprint'
 
         odom_msg.pose.pose.position.x = self.x
         odom_msg.pose.pose.position.y = self.y
@@ -127,10 +153,60 @@ class Localisation(Node):
         self.odom_pub.publish(odom_msg)
 
     def update_localisation(self):
+        if not self.encoder_data_fresh():
+            self.publish_diagnostics()
+            return
+
         self.compute_robot_velocities()
         self.propagate_covariance()
         self.integrate_odometry()
         self.publish_odometry()
+        self.publish_diagnostics()
+
+    def encoder_data_fresh(self):
+        now = self.get_clock().now()
+        wr_age = self.message_age(now, self.last_wr_time)
+        wl_age = self.message_age(now, self.last_wl_time)
+        joint_age = self.message_age(now, self.last_joint_time)
+
+        has_fresh_encoders = (
+            wr_age is not None and wr_age <= self.encoder_timeout and
+            wl_age is not None and wl_age <= self.encoder_timeout
+        )
+        has_fresh_joint_state = joint_age is not None and joint_age <= self.encoder_timeout
+        return has_fresh_encoders or has_fresh_joint_state
+
+    def publish_diagnostics(self):
+        now = self.get_clock().now()
+        if (now - self.last_diagnostic_time).nanoseconds < 2.0e9:
+            return
+
+        self.last_diagnostic_time = now
+        wr_age = self.message_age(now, self.last_wr_time)
+        wl_age = self.message_age(now, self.last_wl_time)
+        joint_age = self.message_age(now, self.last_joint_time)
+
+        if (wr_age is None or wr_age > 1.0) and (joint_age is None or joint_age > 1.0):
+            self.get_logger().warn('No estoy recibiendo encoder derecho reciente.')
+        if (wl_age is None or wl_age > 1.0) and (joint_age is None or joint_age > 1.0):
+            self.get_logger().warn('No estoy recibiendo encoder izquierdo reciente.')
+
+        self.get_logger().info(
+            f'odom local: wr={self.wr:.2f}, wl={self.wl:.2f}, '
+            f'x={self.x:.2f}, y={self.y:.2f}, theta={self.theta:.2f}, '
+            f'wr_age={self.format_age(wr_age)}, wl_age={self.format_age(wl_age)}, '
+            f'joint_age={self.format_age(joint_age)}'
+        )
+
+    def message_age(self, now, last_time):
+        if last_time is None:
+            return None
+        return (now - last_time).nanoseconds * 1.0e-9
+
+    def format_age(self, age):
+        if age is None:
+            return 'nunca'
+        return f'{age:.1f}s'
 
 def main(args=None):
     rclpy.init(args=args)
