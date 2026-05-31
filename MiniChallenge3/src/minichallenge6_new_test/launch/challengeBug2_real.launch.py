@@ -29,10 +29,21 @@ def generate_launch_description():
             'Package rplidar_ros no encontrado. Instala ros-humble-rplidar-ros o ajusta el nombre del paquete en el launch file.'
         )
 
+    rplidar_launch_dir = os.path.join(rplidar_share, 'launch')
+    rplidar_launch_path = None
+    if os.path.isdir(rplidar_launch_dir):
+        for filename in os.listdir(rplidar_launch_dir):
+            if filename.endswith('.launch.py') and 'rplidar' in filename:
+                rplidar_launch_path = os.path.join(rplidar_launch_dir, filename)
+                break
+    if rplidar_launch_path is None:
+        raise RuntimeError(
+            f'No se encontró ningún launch de rplidar_ros en {rplidar_launch_dir}. '
+            'Asegúrate de que el paquete contiene un archivo *.launch.py con rplidar.'
+        )
+
     rplidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(rplidar_share, 'launch', 'rplidar_a1.launch.py')
-        ),
+        PythonLaunchDescriptionSource(rplidar_launch_path),
         launch_arguments={
             'frame_id': laser_frame,
             'port': rplidar_port,
