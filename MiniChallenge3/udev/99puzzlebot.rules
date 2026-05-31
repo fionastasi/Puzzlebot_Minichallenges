@@ -1,0 +1,9 @@
+# Example udev rules for Puzzlebot hardware devices.
+# Copy this file to /etc/udev/rules.d/99puzzlebot.rules and adjust the ATTRS{serial} values
+# to match the actual serial numbers of your micro-ROS MCU and RPLidar devices.
+
+# micro-ROS agent serial device symlink
+SUBSYSTEM=="tty", ATTRS{serial}=="<MICROROS_SERIAL>", SYMLINK+="microros"
+
+# RPLidar serial device symlink
+SUBSYSTEM=="tty", ATTRS{serial}=="<RPLIDAR_SERIAL>", SYMLINK+="rplidar"

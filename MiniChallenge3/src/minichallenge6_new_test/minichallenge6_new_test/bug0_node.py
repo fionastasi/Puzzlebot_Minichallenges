@@ -33,14 +33,31 @@ class Bug0Node(Node):
         self.target_x = 0.0 
         self.target_y = 0.0 
         
-        self.goal_tolerance = 0.15 
-        self.d_thresh = 0.45  
-        
-        # Control proporcional hacia la meta
-        self.k_rho = 0.6
-        self.k_alpha = 1.5
-        self.v_max = 0.2   # Velocidad lineal máxima controlada
-        self.w_max = 0.6   # Velocidad angular máxima para evitar derrapes
+        self.declare_parameter('goal_tolerance', 0.15)
+        self.declare_parameter('d_thresh', 0.45)
+        self.declare_parameter('k_rho', 0.6)
+        self.declare_parameter('k_alpha', 1.5)
+        self.declare_parameter('v_max', 0.2)
+        self.declare_parameter('w_max', 0.6)
+        self.declare_parameter('lidar_front_index', 180)
+        self.declare_parameter('waypoints', [1.0, 0.0, 1.0, 1.5, -0.5, 1.5, -0.5, 0.0])
+        self.declare_parameter('auto_waypoints', True)
+
+        self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        self.d_thresh = self.get_parameter('d_thresh').value
+        self.k_rho = self.get_parameter('k_rho').value
+        self.k_alpha = self.get_parameter('k_alpha').value
+        self.v_max = self.get_parameter('v_max').value   # Velocidad lineal máxima controlada
+        self.w_max = self.get_parameter('w_max').value   # Velocidad angular máxima para evitar derrapes
+        self.lidar_front_index = self.get_parameter('lidar_front_index').value
+        self.waypoints = self._parse_waypoints(self.get_parameter('waypoints').value)
+        self.auto_waypoints = self.get_parameter('auto_waypoints').value
+        self.wp_idx = 0
+
+        self.target_x = 0.0
+        self.target_y = 0.0
+        if self.auto_waypoints and self.waypoints:
+            self.select_waypoint(0)
 
         self.clean_ranges = [10.0] * 360
 
@@ -66,17 +83,42 @@ class Bug0Node(Node):
             self.state = new_state
 
     # Evalúa si la trayectoria hacia la meta está libre de obstáculos
+    def _angle_to_index(self, angle_deg):
+        return int((self.lidar_front_index + angle_deg) % 360)
+
+    def _sector(self, ranges, start_deg, end_deg):
+        start = self._angle_to_index(start_deg)
+        end = self._angle_to_index(end_deg)
+        if start <= end:
+            return ranges[start:end]
+        return ranges[start:] + ranges[:end]
+
+    def _parse_waypoints(self, raw_waypoints):
+        if isinstance(raw_waypoints, list) and len(raw_waypoints) % 2 == 0:
+            return [(float(raw_waypoints[i]), float(raw_waypoints[i + 1])) for i in range(0, len(raw_waypoints), 2)]
+        return []
+
+    def select_waypoint(self, idx):
+        if not self.waypoints:
+            return
+        self.wp_idx = idx % len(self.waypoints)
+        self.target_x, self.target_y = self.waypoints[self.wp_idx]
+        self.goal_received = True
+        self.change_state("GO_TO_GOAL")
+        self.get_logger().info(f"Waypoint {self.wp_idx + 1}/{len(self.waypoints)} -> x={self.target_x}, y={self.target_y}")
+
+    def advance_waypoint(self):
+        if not self.waypoints:
+            self.goal_received = False
+            return
+        self.select_waypoint(self.wp_idx + 1)
+
     def is_path_to_goal_clear(self, err_theta):
-        # El sensor LiDAR se indexa en 360° y el frente corresponde al índice 180
-        idx = 180 + int(math.degrees(err_theta))
-        idx = self.clamp(idx, 0, 359)
-        
-        # Evalúa el sector de ±15 grados respecto al vector hacia la meta
-        inicio = max(0, idx - 15)
-        fin = min(359, idx + 15)
-        
-        # Si la lectura mínima en el sector excede el umbral, la ruta se considera libre
-        if min(self.clean_ranges[inicio:fin]) > (self.d_thresh + 0.15):
+        # Evalúa un sector de ±15 grados alrededor de la dirección hacia la meta
+        inicio = math.degrees(err_theta) - 15
+        fin = math.degrees(err_theta) + 15
+        sector = self._sector(self.clean_ranges, inicio, fin)
+        if min(sector + [10.0]) > (self.d_thresh + 0.15):
             return True
         return False
 
@@ -94,7 +136,10 @@ class Bug0Node(Node):
             self.change_state("STOP")
             self.get_logger().info('Meta alcanzada con Bug 0.')
             self.cmd_pub.publish(Twist()) 
-            self.goal_received = False 
+            if self.auto_waypoints:
+                self.advance_waypoint()
+            else:
+                self.goal_received = False 
             return
 
         # ---------------- TRANSICIONES DE ESTADO ---------------- #
@@ -174,11 +219,11 @@ class Bug0Node(Node):
         
         # Actualiza la indexación del LiDAR para el formato de 360° del robot
         self.regions = {
-            'right':  min(clean_ranges[50:110] + [10.0]),   
-            'fright': min(clean_ranges[110:160] + [10.0]),  
-            'front':  min(clean_ranges[160:200] + [10.0]),  
-            'fleft':  min(clean_ranges[200:250] + [10.0]),  
-            'left':   min(clean_ranges[250:310] + [10.0]),  
+            'right':  min(self._sector(clean_ranges, -130, -70) + [10.0]),   
+            'fright': min(self._sector(clean_ranges, -70, -20) + [10.0]),  
+            'front':  min(self._sector(clean_ranges, -20, 20) + [10.0]),  
+            'fleft':  min(self._sector(clean_ranges, 20, 70) + [10.0]),  
+            'left':   min(self._sector(clean_ranges, 70, 130) + [10.0]),  
         }
 
     def shutdown_function(self, signum, frame): 

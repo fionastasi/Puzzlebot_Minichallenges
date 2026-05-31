@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 import math
@@ -17,11 +18,22 @@ class URDF_TFS(Node):
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
         self.joint_pub = self.create_publisher(JointState, 'joint_states', 10)
         self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
-        self.wl_sub = self.create_subscription(Float32, 'wl', self.wl_callback, 10)
-        self.wr_sub = self.create_subscription(Float32, 'wr', self.wr_callback, 10)
 
         self.declare_parameter('tf_prefix', '')
+        self.declare_parameter('topic_wl', '/wl')
+        self.declare_parameter('topic_wr', '/wr')
+
         self.tf_prefix = self.get_parameter('tf_prefix').value
+        wl_topic = self.get_parameter('topic_wl').value
+        wr_topic = self.get_parameter('topic_wr').value
+
+        qos_sensor = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            depth=10,
+        )
+        self.wl_sub = self.create_subscription(Float32, wl_topic, self.wl_callback, qos_sensor)
+        self.wr_sub = self.create_subscription(Float32, wr_topic, self.wr_callback, qos_sensor)
 
         self.x = 0.0
         self.y = 0.0

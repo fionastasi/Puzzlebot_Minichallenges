@@ -41,14 +41,31 @@ class Bug2Node(Node):
         self.hit_x = 0.0  # Coordenada X del punto de impacto
         self.hit_y = 0.0  # Coordenada Y del punto de impacto
         
-        self.goal_tolerance = 0.15 
-        self.d_thresh = 0.45  
-        self.m_line_tolerance = 0.25 
-        
-        self.k_rho = 0.6
-        self.k_alpha = 1.5
-        self.v_max = 0.2  # Velocidad lineal máxima
-        self.w_max = 0.6  
+        self.declare_parameter('goal_tolerance', 0.15)
+        self.declare_parameter('d_thresh', 0.45)
+        self.declare_parameter('m_line_tolerance', 0.25)
+        self.declare_parameter('k_rho', 0.6)
+        self.declare_parameter('k_alpha', 1.5)
+        self.declare_parameter('v_max', 0.2)
+        self.declare_parameter('w_max', 0.6)
+        self.declare_parameter('lidar_front_index', 180)
+        self.declare_parameter('waypoints', [1.0, 0.0, 1.0, 1.5, -0.5, 1.5, -0.5, 0.0])
+        self.declare_parameter('auto_waypoints', True)
+
+        self.goal_tolerance = self.get_parameter('goal_tolerance').value 
+        self.d_thresh = self.get_parameter('d_thresh').value  
+        self.m_line_tolerance = self.get_parameter('m_line_tolerance').value 
+        self.k_rho = self.get_parameter('k_rho').value
+        self.k_alpha = self.get_parameter('k_alpha').value
+        self.v_max = self.get_parameter('v_max').value  # Velocidad lineal máxima
+        self.w_max = self.get_parameter('w_max').value  
+        self.lidar_front_index = self.get_parameter('lidar_front_index').value
+        self.waypoints = self._parse_waypoints(self.get_parameter('waypoints').value)
+        self.auto_waypoints = self.get_parameter('auto_waypoints').value
+        self.wp_idx = 0
+
+        if self.auto_waypoints and self.waypoints:
+            self.select_waypoint(0)
 
         self.regions = {
             'front': 10.0, 'fleft': 10.0, 'left': 10.0, 'right': 10.0, 'fright': 10.0,
@@ -80,6 +97,38 @@ class Bug2Node(Node):
             return 0.0
         return num / den
 
+    def _angle_to_index(self, angle_deg):
+        return int((self.lidar_front_index + angle_deg) % 360)
+
+    def _sector(self, ranges, start_deg, end_deg):
+        start = self._angle_to_index(start_deg)
+        end = self._angle_to_index(end_deg)
+        if start <= end:
+            return ranges[start:end]
+        return ranges[start:] + ranges[:end]
+
+    def _parse_waypoints(self, raw_waypoints):
+        if isinstance(raw_waypoints, list) and len(raw_waypoints) % 2 == 0:
+            return [(float(raw_waypoints[i]), float(raw_waypoints[i + 1])) for i in range(0, len(raw_waypoints), 2)]
+        return []
+
+    def select_waypoint(self, idx):
+        if not self.waypoints:
+            return
+        self.wp_idx = idx % len(self.waypoints)
+        self.target_x, self.target_y = self.waypoints[self.wp_idx]
+        self.start_x = self.x
+        self.start_y = self.y
+        self.goal_received = True
+        self.change_state("GO_TO_GOAL")
+        self.get_logger().info(f"Waypoint {self.wp_idx + 1}/{len(self.waypoints)} -> x={self.target_x}, y={self.target_y}")
+
+    def advance_waypoint(self):
+        if not self.waypoints:
+            self.goal_received = False
+            return
+        self.select_waypoint(self.wp_idx + 1)
+
     def control_loop(self): 
         if not self.goal_received:
             return
@@ -94,7 +143,10 @@ class Bug2Node(Node):
             self.change_state("STOP")
             self.get_logger().info('Meta alcanzada. Deteniendo Bug2.')
             self.cmd_pub.publish(Twist()) 
-            self.goal_received = False 
+            if self.auto_waypoints:
+                self.advance_waypoint()
+            else:
+                self.goal_received = False 
             return
 
        # ---------------- TRANSICIONES DE ESTADO ---------------- #
@@ -186,14 +238,12 @@ class Bug2Node(Node):
         
         if num_rays > 0:
             if num_rays >= 350: 
-                # LÓGICA CORREGIDA PARA LIDAR 360 GRADOS (-180 a 180)
-                # El índice 180 es el centro (Frente). Añadimos [+ [10.0]] por seguridad.
                 self.regions = {
-                    'right':  min(clean_ranges[50:110] + [10.0]),   # Aprox -130° a -70°
-                    'fright': min(clean_ranges[110:160] + [10.0]),  # Aprox -70° a -20°
-                    'front':  min(clean_ranges[160:200] + [10.0]),  # Aprox -20° a +20° (frente del robot)
-                    'fleft':  min(clean_ranges[200:250] + [10.0]),  # Aprox +20° a +70°
-                    'left':   min(clean_ranges[250:310] + [10.0]),  # Aprox +70° a +130°
+                    'right':  min(self._sector(clean_ranges, -130, -70) + [10.0]),   # Aprox -130° a -70°
+                    'fright': min(self._sector(clean_ranges, -70, -20) + [10.0]),  # Aprox -70° a -20°
+                    'front':  min(self._sector(clean_ranges, -20, 20) + [10.0]),  # Aprox -20° a +20° (frente del robot)
+                    'fleft':  min(self._sector(clean_ranges, 20, 70) + [10.0]),  # Aprox +20° a +70°
+                    'left':   min(self._sector(clean_ranges, 70, 130) + [10.0]),  # Aprox +70° a +130°
                 }
 
     def shutdown_function(self, signum, frame): 
