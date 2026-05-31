@@ -22,9 +22,16 @@ def generate_launch_description():
     wl_topic = LaunchConfiguration('wl_topic', default='/wl')
     wr_topic = LaunchConfiguration('wr_topic', default='/wr')
 
+    try:
+        rplidar_share = get_package_share_directory('rplidar_ros')
+    except Exception:
+        raise RuntimeError(
+            'Package rplidar_ros no encontrado. Instala ros-humble-rplidar-ros o ajusta el nombre del paquete en el launch file.'
+        )
+
     rplidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory('rplidar_ros'), 'launch', 'rplidar_a1.launch.py')
+            os.path.join(rplidar_share, 'launch', 'rplidar_a1.launch.py')
         ),
         launch_arguments={
             'frame_id': laser_frame,
