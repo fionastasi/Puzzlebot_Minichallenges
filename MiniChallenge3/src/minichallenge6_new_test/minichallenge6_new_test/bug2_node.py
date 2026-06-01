@@ -71,12 +71,12 @@ class Bug2Node(Node):
         self.declare_parameter('w_max', 0.40)
         self.declare_parameter('heading_tolerance', 0.15)
         self.declare_parameter('min_forward_speed', 0.02)
-        self.declare_parameter('front_stop_distance', 0.22)
-        self.declare_parameter('front_slow_distance', 0.38)
-        self.declare_parameter('avoidance_start_distance', 0.38)
-        self.declare_parameter('wall_follow_start_distance', 0.28)
-        self.declare_parameter('wall_distance', 0.24)
-        self.declare_parameter('right_too_close', 0.18)
+        self.declare_parameter('front_stop_distance', 0.18)
+        self.declare_parameter('front_slow_distance', 0.28)
+        self.declare_parameter('avoidance_start_distance', 0.30)
+        self.declare_parameter('wall_follow_start_distance', 0.24)
+        self.declare_parameter('wall_distance', 0.16)
+        self.declare_parameter('right_too_close', 0.11)
         self.declare_parameter('avoidance_kv', 0.5)
         self.declare_parameter('avoidance_kw', 0.7)
         self.declare_parameter('sensor_timeout', 1.0)
@@ -144,7 +144,7 @@ class Bug2Node(Node):
     def get_closest_front_object_info(self):
         front_values = [
             (distance, angle) for angle, distance in self.angle_ranges
-            if abs(angle) <= math.radians(70)
+            if abs(angle) <= math.radians(40)
         ]
         if not front_values:
             return None, 0.0
