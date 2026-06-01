@@ -19,6 +19,13 @@ def generate_launch_description():
     rotate_in_place = LaunchConfiguration('rotate_in_place')
     require_scan = LaunchConfiguration('require_scan')
     require_odom = LaunchConfiguration('require_odom')
+    laser_distance_topic = LaunchConfiguration('laser_distance_topic')
+    servo_angle_topic = LaunchConfiguration('servo_angle_topic')
+    laser_distance_scale = LaunchConfiguration('laser_distance_scale')
+    front_stop_distance = LaunchConfiguration('front_stop_distance')
+    servo_sweep_enabled = LaunchConfiguration('servo_sweep_enabled')
+    obstacle_source = LaunchConfiguration('obstacle_source')
+    scan_front_angle = LaunchConfiguration('scan_front_angle')
 
     common_parameters = [{'use_sim_time': False}]
 
@@ -46,12 +53,19 @@ def generate_launch_description():
             {'rotate_in_place': ParameterValue(rotate_in_place, value_type=bool)},
             {'require_scan': ParameterValue(require_scan, value_type=bool)},
             {'require_odom': ParameterValue(require_odom, value_type=bool)},
+            {'laser_distance_scale': ParameterValue(laser_distance_scale, value_type=float)},
+            {'front_stop_distance': ParameterValue(front_stop_distance, value_type=float)},
+            {'servo_sweep_enabled': ParameterValue(servo_sweep_enabled, value_type=bool)},
+            {'obstacle_source': obstacle_source},
+            {'scan_front_angle': ParameterValue(scan_front_angle, value_type=float)},
         ],
         remappings=[
             ('cmd_vel', cmd_vel_topic),
             ('odom', odom_topic),
             ('scan', scan_topic),
             ('goal', goal_topic),
+            ('LaserDistance', laser_distance_topic),
+            ('ServoAngle', servo_angle_topic),
         ],
     )
 
@@ -59,8 +73,8 @@ def generate_launch_description():
         SetEnvironmentVariable('ROS_LOCALHOST_ONLY', '0'),
         DeclareLaunchArgument(
             'use_localisation',
-            default_value='false',
-            description='Genera odom desde encoders. Usa true solo si el robot no publica odom.',
+            default_value='true',
+            description='Genera odom desde encoders. Usa false si el robot publica odom confiable.',
         ),
         DeclareLaunchArgument(
             'cmd_vel_topic',
@@ -106,6 +120,41 @@ def generate_launch_description():
             'require_odom',
             default_value='true',
             description='Si es true, el robot se detiene cuando no hay odometria reciente.',
+        ),
+        DeclareLaunchArgument(
+            'laser_distance_topic',
+            default_value='LaserDistance',
+            description='Topico de distancia del sensor frontal/servo.',
+        ),
+        DeclareLaunchArgument(
+            'servo_angle_topic',
+            default_value='ServoAngle',
+            description='Topico del angulo del servo del sensor de distancia.',
+        ),
+        DeclareLaunchArgument(
+            'laser_distance_scale',
+            default_value='1.0',
+            description='Escala para LaserDistance. Usa 0.01 si el sensor publica centimetros.',
+        ),
+        DeclareLaunchArgument(
+            'front_stop_distance',
+            default_value='0.22',
+            description='Distancia frontal para detener avance y entrar a seguimiento de pared.',
+        ),
+        DeclareLaunchArgument(
+            'servo_sweep_enabled',
+            default_value='false',
+            description='Publica comandos en ServoAngle para barrer el sensor de distancia.',
+        ),
+        DeclareLaunchArgument(
+            'obstacle_source',
+            default_value='scan',
+            description='Fuente de obstaculos: scan, laser_distance o auto.',
+        ),
+        DeclareLaunchArgument(
+            'scan_front_angle',
+            default_value='0.0',
+            description='Angulo en grados que corresponde al frente del robot dentro del LaserScan.',
         ),
         localisation,
         bug0_node,

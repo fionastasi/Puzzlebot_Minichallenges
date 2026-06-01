@@ -1,5 +1,21 @@
 # Puzzlebot Sim Multi-Robot Refactor
 
+## Puzzlebot Fisico: RPLidar
+
+Antes de lanzar cualquier comportamiento que use el LiDAR fisico, arrancar el RPLidar en el robot:
+
+```bash
+ros2 launch rplidar_ros rplidar_a1_launch.py serial_port:=/dev/ttyUSB1
+```
+
+Verificar desde la computadora de control:
+
+```bash
+ros2 topic info /scan
+```
+
+Debe aparecer `Publisher count: 1`.
+
 This package was refactored to support two independent Puzzlebot robots in ROS 2 using namespaces, relative topics, and namespaced TF frames.
 
 The goal was to move from a single-robot demo to a clean multi-robot launch setup where each robot has its own control, localization, kinematic simulation, and TF tree without frame collisions.

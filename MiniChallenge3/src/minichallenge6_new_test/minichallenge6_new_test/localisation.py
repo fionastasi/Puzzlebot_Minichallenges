@@ -14,11 +14,17 @@ class Localisation(Node):
         
         # Gazebo publica joint_states; el Puzzlebot fisico publica velocidades de encoder.
         self.joint_sub = self.create_subscription(JointState, 'joint_states', self.joint_callback, 10)
-        self.create_subscription(JointState, 'joint_states', self.joint_callback, qos.qos_profile_sensor_data)
+        self.joint_sensor_sub = self.create_subscription(
+            JointState, 'joint_states', self.joint_callback, qos.qos_profile_sensor_data
+        )
         self.wr_sub = self.create_subscription(Float32, 'VelocityEncR', self.wr_callback, 10)
-        self.create_subscription(Float32, 'VelocityEncR', self.wr_callback, qos.qos_profile_sensor_data)
+        self.wr_sensor_sub = self.create_subscription(
+            Float32, 'VelocityEncR', self.wr_callback, qos.qos_profile_sensor_data
+        )
         self.wl_sub = self.create_subscription(Float32, 'VelocityEncL', self.wl_callback, 10)
-        self.create_subscription(Float32, 'VelocityEncL', self.wl_callback, qos.qos_profile_sensor_data)
+        self.wl_sensor_sub = self.create_subscription(
+            Float32, 'VelocityEncL', self.wl_callback, qos.qos_profile_sensor_data
+        )
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
 
         self.declare_parameter('initial_x', 0.0)
