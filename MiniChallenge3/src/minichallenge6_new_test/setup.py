@@ -32,6 +32,7 @@ setup(
             "odometry_node = minichallenge6_new_test.odometry_node:main",
             "bug0_node = minichallenge6_new_test.bug0_node:main",
             "bug2_node = minichallenge6_new_test.bug2_node:main",
+            "aruco_detection_monitor = minichallenge6_new_test.aruco_detection_monitor:main",
         ],
     },
 )

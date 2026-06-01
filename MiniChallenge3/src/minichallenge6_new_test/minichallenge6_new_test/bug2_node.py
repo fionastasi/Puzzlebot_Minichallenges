@@ -44,6 +44,7 @@ class Bug2Node(Node):
         self.hit_y = 0.0
         self.hit_distance = float('inf')
         self.left_hit_region = False
+        self.best_dist_to_goal = float('inf')
 
         self.last_odom_time = None
         self.last_scan_time = None
@@ -60,7 +61,12 @@ class Bug2Node(Node):
             'back': 10.0, 'bleft': 10.0, 'left': 10.0, 'fleft': 10.0,
         }
 
-        self.declare_parameter('goal_tolerance', 0.10)
+        self.declare_parameter('goal_tolerance', 0.05)
+        self.declare_parameter('wall_follow_goal_tolerance', 0.18)
+        self.declare_parameter('goal_pass_margin', 0.02)
+        self.declare_parameter('goal_pass_lateral_tolerance', 0.22)
+        self.declare_parameter('near_goal_slow_distance', 0.35)
+        self.declare_parameter('near_goal_v_max', 0.025)
         self.declare_parameter('m_line_tolerance', 0.10)
         self.declare_parameter('min_hit_separation', 0.35)
         self.declare_parameter('hit_return_tolerance', 0.18)
@@ -85,6 +91,11 @@ class Bug2Node(Node):
         self.declare_parameter('scan_front_angle', 0.0)
 
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        self.wall_follow_goal_tolerance = self.get_parameter('wall_follow_goal_tolerance').value
+        self.goal_pass_margin = self.get_parameter('goal_pass_margin').value
+        self.goal_pass_lateral_tolerance = self.get_parameter('goal_pass_lateral_tolerance').value
+        self.near_goal_slow_distance = self.get_parameter('near_goal_slow_distance').value
+        self.near_goal_v_max = self.get_parameter('near_goal_v_max').value
         self.m_line_tolerance = self.get_parameter('m_line_tolerance').value
         self.min_hit_separation = self.get_parameter('min_hit_separation').value
         self.hit_return_tolerance = self.get_parameter('hit_return_tolerance').value
@@ -161,6 +172,51 @@ class Bug2Node(Node):
             return 0.0
         return num / den
 
+    def goal_line_progress(self):
+        goal_dx = self.target_x - self.start_x
+        goal_dy = self.target_y - self.start_y
+        goal_length = math.sqrt(goal_dx ** 2 + goal_dy ** 2)
+        if goal_length == 0.0:
+            return 0.0, 0.0, 0.0
+
+        robot_dx = self.x - self.start_x
+        robot_dy = self.y - self.start_y
+        progress = (robot_dx * goal_dx + robot_dy * goal_dy) / goal_length
+        lateral_error = self.distance_to_m_line()
+        return progress, goal_length, lateral_error
+
+    def should_stop_for_goal(self, dist_to_goal):
+        if dist_to_goal <= self.goal_tolerance:
+            return True, f'dist={dist_to_goal:.2f} m'
+
+        if self.state == 'WALL_FOLLOWING' and dist_to_goal <= self.wall_follow_goal_tolerance:
+            return True, f'captura en WALL_FOLLOWING, dist={dist_to_goal:.2f} m'
+
+        if (
+                self.best_dist_to_goal <= self.wall_follow_goal_tolerance and
+                dist_to_goal > self.best_dist_to_goal + self.goal_pass_margin):
+            return True, (
+                f'ya paso cerca de meta, dist={dist_to_goal:.2f} m, '
+                f'mejor={self.best_dist_to_goal:.2f} m'
+            )
+
+        progress, goal_length, lateral_error = self.goal_line_progress()
+        crossed_goal_plane = progress >= (goal_length - self.goal_tolerance)
+        near_goal_corridor = lateral_error <= self.goal_pass_lateral_tolerance
+        if crossed_goal_plane and near_goal_corridor:
+            return True, (
+                f'cruzo plano de meta, progreso={progress:.2f}/{goal_length:.2f} m, '
+                f'error_lateral={lateral_error:.2f} m'
+            )
+
+        return False, ''
+
+    def stop_at_goal(self, reason):
+        self.change_state('STOP')
+        self.get_logger().info(f'Meta alcanzada. Deteniendo Bug2: {reason}.')
+        self.cmd_pub.publish(Twist())
+        self.goal_received = False
+
     def is_path_to_goal_clear(self, err_theta):
         return (
             self.sector_min(err_theta, math.radians(15)) > self.front_slow_distance and
@@ -207,6 +263,14 @@ class Bug2Node(Node):
         odom_age = self.message_age(now, self.last_odom_time)
         scan_age = self.message_age(now, self.last_scan_time)
 
+        if odom_age is not None and odom_age <= self.sensor_timeout:
+            dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+            self.best_dist_to_goal = min(self.best_dist_to_goal, dist_to_goal)
+            should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
+            if should_stop:
+                self.stop_at_goal(stop_reason)
+                return
+
         if not self.sensors_ready(odom_age, scan_age):
             self.cmd_pub.publish(msg)
             self.publish_diagnostics(msg, None, None, odom_age, scan_age)
@@ -223,11 +287,9 @@ class Bug2Node(Node):
         self.closest_front_range = closest_front_range
         self.closest_front_angle = closest_front_angle
 
-        if dist_to_goal < self.goal_tolerance:
-            self.change_state('STOP')
-            self.get_logger().info('Meta alcanzada. Deteniendo Bug2.')
-            self.cmd_pub.publish(Twist())
-            self.goal_received = False
+        should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
+        if should_stop:
+            self.stop_at_goal(stop_reason)
             return
 
         if self.state == 'GO_TO_GOAL':
@@ -278,6 +340,10 @@ class Bug2Node(Node):
             else:
                 msg.linear.x = self.clamp(self.k_rho * dist_to_goal, 0.0, self.v_max)
                 msg.angular.z = 0.0
+
+            if dist_to_goal < self.near_goal_slow_distance:
+                near_factor = self.clamp(dist_to_goal / self.near_goal_slow_distance, 0.25, 1.0)
+                msg.linear.x = min(msg.linear.x, self.near_goal_v_max * near_factor)
 
             if msg.linear.x > 0.0 and closest_front_range is not None and closest_front_range < self.front_slow_distance:
                 clearance = closest_front_range - self.front_stop_distance
@@ -374,6 +440,7 @@ class Bug2Node(Node):
         self.start_y = self.y
         self.hit_distance = float('inf')
         self.left_hit_region = False
+        self.best_dist_to_goal = float('inf')
         self.goal_received = True
         self.change_state('GO_TO_GOAL')
         self.get_logger().info(f'Bug2 Meta: x={self.target_x}, y={self.target_y}. Linea M trazada.')

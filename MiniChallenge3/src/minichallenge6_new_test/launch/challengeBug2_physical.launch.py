@@ -22,7 +22,18 @@ def generate_launch_description():
     avoidance_start_distance = LaunchConfiguration('avoidance_start_distance')
     wall_follow_start_distance = LaunchConfiguration('wall_follow_start_distance')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
+    wall_follow_goal_tolerance = LaunchConfiguration('wall_follow_goal_tolerance')
+    goal_pass_margin = LaunchConfiguration('goal_pass_margin')
+    goal_pass_lateral_tolerance = LaunchConfiguration('goal_pass_lateral_tolerance')
+    near_goal_slow_distance = LaunchConfiguration('near_goal_slow_distance')
+    near_goal_v_max = LaunchConfiguration('near_goal_v_max')
     scan_front_angle = LaunchConfiguration('scan_front_angle')
+    use_aruco_tracker = LaunchConfiguration('use_aruco_tracker')
+    use_aruco_monitor = LaunchConfiguration('use_aruco_monitor')
+    aruco_cam_base_topic = LaunchConfiguration('aruco_cam_base_topic')
+    aruco_marker_size = LaunchConfiguration('aruco_marker_size')
+    aruco_detection_topic = LaunchConfiguration('aruco_detection_topic')
+    aruco_detection_type = LaunchConfiguration('aruco_detection_type')
 
     common_parameters = [{'use_sim_time': False}]
 
@@ -53,6 +64,11 @@ def generate_launch_description():
             {'avoidance_start_distance': ParameterValue(avoidance_start_distance, value_type=float)},
             {'wall_follow_start_distance': ParameterValue(wall_follow_start_distance, value_type=float)},
             {'goal_tolerance': ParameterValue(goal_tolerance, value_type=float)},
+            {'wall_follow_goal_tolerance': ParameterValue(wall_follow_goal_tolerance, value_type=float)},
+            {'goal_pass_margin': ParameterValue(goal_pass_margin, value_type=float)},
+            {'goal_pass_lateral_tolerance': ParameterValue(goal_pass_lateral_tolerance, value_type=float)},
+            {'near_goal_slow_distance': ParameterValue(near_goal_slow_distance, value_type=float)},
+            {'near_goal_v_max': ParameterValue(near_goal_v_max, value_type=float)},
             {'scan_front_angle': ParameterValue(scan_front_angle, value_type=float)},
         ],
         remappings=[
@@ -60,6 +76,30 @@ def generate_launch_description():
             ('odom', odom_topic),
             ('scan', scan_topic),
             ('goal', goal_topic),
+        ],
+    )
+
+    aruco_tracker = Node(
+        package='aruco_opencv',
+        executable='aruco_tracker_autostart',
+        name='aruco_tracker_autostart',
+        output='screen',
+        condition=IfCondition(use_aruco_tracker),
+        parameters=[
+            {'cam_base_topic': aruco_cam_base_topic},
+            {'marker_size': ParameterValue(aruco_marker_size, value_type=float)},
+        ],
+    )
+
+    aruco_monitor = Node(
+        package=package_name,
+        executable='aruco_detection_monitor',
+        name='aruco_detection_monitor',
+        output='screen',
+        condition=IfCondition(use_aruco_monitor),
+        parameters=[
+            {'detection_topic': aruco_detection_topic},
+            {'detection_type': aruco_detection_type},
         ],
     )
 
@@ -131,10 +171,67 @@ def generate_launch_description():
             description='Radio en metros para considerar alcanzada la meta.',
         ),
         DeclareLaunchArgument(
+            'wall_follow_goal_tolerance',
+            default_value='0.18',
+            description='Radio de captura de meta cuando Bug2 esta siguiendo pared.',
+        ),
+        DeclareLaunchArgument(
+            'goal_pass_margin',
+            default_value='0.02',
+            description='Margen para detenerse si ya paso cerca de la meta y se empieza a alejar.',
+        ),
+        DeclareLaunchArgument(
+            'goal_pass_lateral_tolerance',
+            default_value='0.22',
+            description='Distancia lateral maxima a la linea inicio-meta para detener si ya cruzo la meta.',
+        ),
+        DeclareLaunchArgument(
+            'near_goal_slow_distance',
+            default_value='0.35',
+            description='Distancia a meta desde la que Bug2 reduce velocidad.',
+        ),
+        DeclareLaunchArgument(
+            'near_goal_v_max',
+            default_value='0.025',
+            description='Velocidad maxima cerca de la meta.',
+        ),
+        DeclareLaunchArgument(
             'scan_front_angle',
             default_value='0.0',
             description='Angulo en grados que corresponde al frente del robot dentro del LaserScan.',
         ),
+        DeclareLaunchArgument(
+            'use_aruco_tracker',
+            default_value='true',
+            description='Arranca aruco_opencv/aruco_tracker_autostart desde este launch.',
+        ),
+        DeclareLaunchArgument(
+            'use_aruco_monitor',
+            default_value='true',
+            description='Arranca monitor propio que reporta el ArUco mas cercano sin corregir odometria.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_cam_base_topic',
+            default_value='/image_raw',
+            description='Topico base de imagen usado por aruco_opencv.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_marker_size',
+            default_value='0.06',
+            description='Tamano del marcador ArUco en metros usado por aruco_opencv.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_detection_topic',
+            default_value='/marker_publisher/markers',
+            description='Topico de detecciones/markers que escucha el monitor ArUco.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_detection_type',
+            default_value='visualization_marker_array',
+            description='Tipo de deteccion: visualization_marker_array o aruco_opencv.',
+        ),
         localisation,
+        aruco_tracker,
+        aruco_monitor,
         bug2_node,
     ])
