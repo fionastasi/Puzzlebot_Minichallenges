@@ -65,10 +65,10 @@ class Bug0Node(Node):
         self.closest_range = None
         self.closest_angle = 0.0
         
-        self.goal_tolerance = 0.15 
         self.d_thresh = 0.24  
         
         # Control proporcional hacia la meta
+        self.declare_parameter('goal_tolerance', 0.05)
         self.declare_parameter('k_rho', 0.6)
         self.declare_parameter('k_alpha', 1.5)
         self.declare_parameter('v_max', 0.06)
@@ -96,6 +96,7 @@ class Bug0Node(Node):
         self.declare_parameter('servo_step', 15.0)
         self.declare_parameter('servo_period', 0.12)
 
+        self.goal_tolerance = self.get_parameter('goal_tolerance').value
         self.k_rho = self.get_parameter('k_rho').value
         self.k_alpha = self.get_parameter('k_alpha').value
         self.v_max = self.get_parameter('v_max').value
@@ -324,15 +325,8 @@ class Bug0Node(Node):
                 'No estoy recibiendo sensor de obstaculos reciente; el robot se mantiene detenido.'
             )
 
-        cmd_subs = self.count_subscribers(self.cmd_pub.topic_name)
-        dist_text = 'sin_odom' if dist_to_goal is None else f'{dist_to_goal:.2f}'
-        err_text = 'sin_odom' if err_theta is None else f'{err_theta:.2f}'
         self.get_logger().info(
-            f'cmd_vel: v={cmd_msg.linear.x:.2f}, w={cmd_msg.angular.z:.2f}, '
-            f'dist={dist_text}, err_theta={err_text}, '
-            f'odom_age={self.format_age(odom_age)}, obstacle_age={self.format_age(scan_age)}, '
-            f'obstacle_source={self.obstacle_source}, cmd_subs={cmd_subs}, '
-            f'closest={self.format_closest()}, regions={self.format_regions()}'
+            f'estado={self.state}, x={self.x:.2f}, y={self.y:.2f}, theta={self.theta:.2f}'
         )
 
     def obstacle_age(self, now):

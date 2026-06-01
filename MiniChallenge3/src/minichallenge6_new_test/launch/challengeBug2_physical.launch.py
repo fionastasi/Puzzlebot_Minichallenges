@@ -16,17 +16,13 @@ def generate_launch_description():
     goal_topic = LaunchConfiguration('goal_topic')
     wr_topic = LaunchConfiguration('wr_topic')
     wl_topic = LaunchConfiguration('wl_topic')
-    rotate_in_place = LaunchConfiguration('rotate_in_place')
     require_scan = LaunchConfiguration('require_scan')
     require_odom = LaunchConfiguration('require_odom')
-    laser_distance_topic = LaunchConfiguration('laser_distance_topic')
-    servo_angle_topic = LaunchConfiguration('servo_angle_topic')
-    laser_distance_scale = LaunchConfiguration('laser_distance_scale')
     front_stop_distance = LaunchConfiguration('front_stop_distance')
-    servo_sweep_enabled = LaunchConfiguration('servo_sweep_enabled')
-    obstacle_source = LaunchConfiguration('obstacle_source')
-    scan_front_angle = LaunchConfiguration('scan_front_angle')
+    avoidance_start_distance = LaunchConfiguration('avoidance_start_distance')
+    wall_follow_start_distance = LaunchConfiguration('wall_follow_start_distance')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
+    scan_front_angle = LaunchConfiguration('scan_front_angle')
 
     common_parameters = [{'use_sim_time': False}]
 
@@ -44,30 +40,26 @@ def generate_launch_description():
         ],
     )
 
-    bug0_node = Node(
+    bug2_node = Node(
         package=package_name,
-        executable='bug0_node',
-        name='bug0_node',
+        executable='bug2_node',
+        name='bug2_node',
         output='screen',
         parameters=[
             {'use_sim_time': False},
-            {'rotate_in_place': ParameterValue(rotate_in_place, value_type=bool)},
             {'require_scan': ParameterValue(require_scan, value_type=bool)},
             {'require_odom': ParameterValue(require_odom, value_type=bool)},
-            {'laser_distance_scale': ParameterValue(laser_distance_scale, value_type=float)},
             {'front_stop_distance': ParameterValue(front_stop_distance, value_type=float)},
-            {'servo_sweep_enabled': ParameterValue(servo_sweep_enabled, value_type=bool)},
-            {'obstacle_source': obstacle_source},
-            {'scan_front_angle': ParameterValue(scan_front_angle, value_type=float)},
+            {'avoidance_start_distance': ParameterValue(avoidance_start_distance, value_type=float)},
+            {'wall_follow_start_distance': ParameterValue(wall_follow_start_distance, value_type=float)},
             {'goal_tolerance': ParameterValue(goal_tolerance, value_type=float)},
+            {'scan_front_angle': ParameterValue(scan_front_angle, value_type=float)},
         ],
         remappings=[
             ('cmd_vel', cmd_vel_topic),
             ('odom', odom_topic),
             ('scan', scan_topic),
             ('goal', goal_topic),
-            ('LaserDistance', laser_distance_topic),
-            ('ServoAngle', servo_angle_topic),
         ],
     )
 
@@ -91,7 +83,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'scan_topic',
             default_value='scan',
-            description='Topico del LiDAR del Puzzlebot fisico.',
+            description='Topico del RPLidar fisico.',
         ),
         DeclareLaunchArgument(
             'goal_topic',
@@ -109,14 +101,9 @@ def generate_launch_description():
             description='Topico de velocidad angular del encoder izquierdo.',
         ),
         DeclareLaunchArgument(
-            'rotate_in_place',
-            default_value='false',
-            description='Si es true, primero gira y luego avanza. Si es false, avanza en arco.',
-        ),
-        DeclareLaunchArgument(
             'require_scan',
             default_value='true',
-            description='Si es true, el robot se detiene cuando no hay LiDAR reciente.',
+            description='Si es true, el robot se detiene cuando no hay RPLidar reciente.',
         ),
         DeclareLaunchArgument(
             'require_odom',
@@ -124,45 +111,30 @@ def generate_launch_description():
             description='Si es true, el robot se detiene cuando no hay odometria reciente.',
         ),
         DeclareLaunchArgument(
-            'laser_distance_topic',
-            default_value='LaserDistance',
-            description='Topico de distancia del sensor frontal/servo.',
-        ),
-        DeclareLaunchArgument(
-            'servo_angle_topic',
-            default_value='ServoAngle',
-            description='Topico del angulo del servo del sensor de distancia.',
-        ),
-        DeclareLaunchArgument(
-            'laser_distance_scale',
-            default_value='1.0',
-            description='Escala para LaserDistance. Usa 0.01 si el sensor publica centimetros.',
-        ),
-        DeclareLaunchArgument(
             'front_stop_distance',
             default_value='0.22',
-            description='Distancia frontal para detener avance y entrar a seguimiento de pared.',
+            description='Distancia frontal para detener avance y seguir pared en pasillos estrechos.',
         ),
         DeclareLaunchArgument(
-            'servo_sweep_enabled',
-            default_value='false',
-            description='Publica comandos en ServoAngle para barrer el sensor de distancia.',
+            'avoidance_start_distance',
+            default_value='0.38',
+            description='Distancia frontal para empezar a esquivar suavemente sin cambiar necesariamente de estado.',
         ),
         DeclareLaunchArgument(
-            'obstacle_source',
-            default_value='scan',
-            description='Fuente de obstaculos: scan, laser_distance o auto.',
-        ),
-        DeclareLaunchArgument(
-            'scan_front_angle',
-            default_value='0.0',
-            description='Angulo en grados que corresponde al frente del robot dentro del LaserScan.',
+            'wall_follow_start_distance',
+            default_value='0.28',
+            description='Distancia frontal para registrar impacto y cambiar a WALL_FOLLOWING.',
         ),
         DeclareLaunchArgument(
             'goal_tolerance',
             default_value='0.05',
             description='Radio en metros para considerar alcanzada la meta.',
         ),
+        DeclareLaunchArgument(
+            'scan_front_angle',
+            default_value='0.0',
+            description='Angulo en grados que corresponde al frente del robot dentro del LaserScan.',
+        ),
         localisation,
-        bug0_node,
+        bug2_node,
     ])

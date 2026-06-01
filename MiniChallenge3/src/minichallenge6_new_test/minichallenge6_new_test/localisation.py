@@ -198,10 +198,7 @@ class Localisation(Node):
             self.get_logger().warn('No estoy recibiendo encoder izquierdo reciente.')
 
         self.get_logger().info(
-            f'odom local: wr={self.wr:.2f}, wl={self.wl:.2f}, '
-            f'x={self.x:.2f}, y={self.y:.2f}, theta={self.theta:.2f}, '
-            f'wr_age={self.format_age(wr_age)}, wl_age={self.format_age(wl_age)}, '
-            f'joint_age={self.format_age(joint_age)}'
+            f'posicion: x={self.x:.2f}, y={self.y:.2f}, theta={self.theta:.2f}'
         )
 
     def message_age(self, now, last_time):
