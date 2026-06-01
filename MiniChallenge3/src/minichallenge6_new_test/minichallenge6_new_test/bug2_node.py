@@ -23,12 +23,8 @@ class Bug2Node(Node):
 
         self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
-        self.odom_sensor_sub = self.create_subscription(
-            Odometry, 'odom', self.odom_callback, qos.qos_profile_sensor_data
-        )
         self.goal_sub = self.create_subscription(Pose2D, 'goal', self.goal_callback, 10)
-        self.scan_sub = self.create_subscription(LaserScan, 'scan', self.scan_callback, 10)
-        self.scan_sensor_sub = self.create_subscription(
+        self.scan_sub = self.create_subscription(
             LaserScan, 'scan', self.scan_callback, qos.qos_profile_sensor_data
         )
 
@@ -47,6 +43,7 @@ class Bug2Node(Node):
         self.hit_x = 0.0
         self.hit_y = 0.0
         self.hit_distance = float('inf')
+        self.left_hit_region = False
 
         self.last_odom_time = None
         self.last_scan_time = None
@@ -63,14 +60,15 @@ class Bug2Node(Node):
             'back': 10.0, 'bleft': 10.0, 'left': 10.0, 'fleft': 10.0,
         }
 
-        self.declare_parameter('goal_tolerance', 0.05)
-        self.declare_parameter('m_line_tolerance', 0.20)
+        self.declare_parameter('goal_tolerance', 0.10)
+        self.declare_parameter('m_line_tolerance', 0.10)
         self.declare_parameter('min_hit_separation', 0.35)
+        self.declare_parameter('hit_return_tolerance', 0.18)
         self.declare_parameter('m_line_goal_improvement', 0.12)
         self.declare_parameter('k_rho', 0.6)
         self.declare_parameter('k_alpha', 1.5)
-        self.declare_parameter('v_max', 0.06)
-        self.declare_parameter('w_max', 0.30)
+        self.declare_parameter('v_max', 0.08)
+        self.declare_parameter('w_max', 0.40)
         self.declare_parameter('heading_tolerance', 0.15)
         self.declare_parameter('min_forward_speed', 0.02)
         self.declare_parameter('front_stop_distance', 0.22)
@@ -89,6 +87,7 @@ class Bug2Node(Node):
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
         self.m_line_tolerance = self.get_parameter('m_line_tolerance').value
         self.min_hit_separation = self.get_parameter('min_hit_separation').value
+        self.hit_return_tolerance = self.get_parameter('hit_return_tolerance').value
         self.m_line_goal_improvement = self.get_parameter('m_line_goal_improvement').value
         self.k_rho = self.get_parameter('k_rho').value
         self.k_alpha = self.get_parameter('k_alpha').value
@@ -168,6 +167,17 @@ class Bug2Node(Node):
             self.regions['front'] > self.front_slow_distance
         )
 
+    def enter_wall_following(self, dist_to_goal):
+        self.hit_distance = dist_to_goal
+        self.hit_x = self.x
+        self.hit_y = self.y
+        self.left_hit_region = False
+        self.get_logger().info(
+            f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
+            f'a {self.hit_distance:.2f} m.'
+        )
+        self.change_state('WALL_FOLLOWING')
+
     def set_avoidance_command(self, msg, closest_range, theta_closest):
         theta_avoidance = theta_closest - math.pi if theta_closest > 0.0 else theta_closest + math.pi
         theta_avoidance = self.normalize_angle(theta_avoidance)
@@ -222,27 +232,37 @@ class Bug2Node(Node):
 
         if self.state == 'GO_TO_GOAL':
             if closest_front_range is not None and closest_front_range < self.wall_follow_start_distance:
-                self.hit_distance = dist_to_goal
-                self.hit_x = self.x
-                self.hit_y = self.y
-                self.get_logger().info(
-                    f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
-                    f'a {self.hit_distance:.2f} m.'
-                )
-                self.change_state('WALL_FOLLOWING')
+                self.enter_wall_following(dist_to_goal)
 
         elif self.state == 'WALL_FOLLOWING':
             dist_m_line = self.distance_to_m_line()
             dist_to_hit = math.sqrt((self.x - self.hit_x) ** 2 + (self.y - self.hit_y) ** 2)
             closest_clear = closest_front_range is None or closest_front_range > self.avoidance_start_distance
+            if dist_to_hit > self.min_hit_separation:
+                self.left_hit_region = True
+
+            returned_to_hit = (
+                self.left_hit_region and
+                dist_to_hit < self.hit_return_tolerance and
+                dist_to_goal >= (self.hit_distance - self.m_line_goal_improvement)
+            )
 
             if (closest_clear and
                     dist_m_line < self.m_line_tolerance and
                     dist_to_goal < (self.hit_distance - self.m_line_goal_improvement) and
-                    dist_to_hit > self.min_hit_separation and
+                    self.left_hit_region and
                     self.is_path_to_goal_clear(err_theta)):
                 self.get_logger().info(f'Linea M interceptada a {dist_to_goal:.2f} m. Cambio a GO_TO_GOAL.')
                 self.change_state('GO_TO_GOAL')
+            elif returned_to_hit:
+                self.change_state('STOP')
+                self.get_logger().warn(
+                    'Regrese al punto de impacto sin encontrar una Linea M mejor. '
+                    'La meta puede estar bloqueada.'
+                )
+                self.cmd_pub.publish(Twist())
+                self.goal_received = False
+                return
 
         if self.state == 'GO_TO_GOAL':
             if closest_front_range is not None and closest_front_range < self.avoidance_start_distance:
@@ -265,11 +285,11 @@ class Bug2Node(Node):
                 msg.linear.x *= self.clamp(clearance / slow_band, 0.0, 1.0)
 
         elif self.state == 'WALL_FOLLOWING':
-            if closest_front_range is not None and closest_front_range < self.avoidance_start_distance:
-                self.set_avoidance_command(msg, closest_front_range, closest_front_angle)
-            elif self.regions['front'] < self.front_stop_distance:
+            if self.regions['front'] < self.front_stop_distance:
                 msg.linear.x = 0.0
                 msg.angular.z = self.w_max
+            elif closest_front_range is not None and closest_front_range < self.front_stop_distance:
+                self.set_avoidance_command(msg, closest_front_range, closest_front_angle)
             elif self.regions['fright'] < self.wall_distance:
                 msg.linear.x = 0.025
                 msg.angular.z = 0.22
@@ -353,6 +373,7 @@ class Bug2Node(Node):
         self.start_x = self.x
         self.start_y = self.y
         self.hit_distance = float('inf')
+        self.left_hit_region = False
         self.goal_received = True
         self.change_state('GO_TO_GOAL')
         self.get_logger().info(f'Bug2 Meta: x={self.target_x}, y={self.target_y}. Linea M trazada.')
