@@ -222,13 +222,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'aruco_detection_topic',
-            default_value='/marker_publisher/markers',
+            default_value='/marker_publisher/markers_list',
             description='Topico de detecciones/markers que escucha el monitor ArUco.',
         ),
         DeclareLaunchArgument(
             'aruco_detection_type',
-            default_value='visualization_marker_array',
-            description='Tipo de deteccion: visualization_marker_array o aruco_opencv.',
+            default_value='markers_list_u32',
+            description='Tipo de deteccion: markers_list, markers_list_u32, aruco_msgs, visualization_marker_array o aruco_opencv.',
         ),
         localisation,
         aruco_tracker,

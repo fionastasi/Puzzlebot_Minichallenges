@@ -20,15 +20,19 @@ use_aruco_tracker:=true
 use_aruco_monitor:=true
 aruco_cam_base_topic:=/image_raw
 aruco_marker_size:=0.06
-aruco_detection_topic:=/marker_publisher/markers
-aruco_detection_type:=visualization_marker_array
+aruco_detection_topic:=/marker_publisher/markers_list
+aruco_detection_type:=markers_list
 ```
 
-Si se quiere escuchar el mensaje nativo de `aruco_opencv`, cambiar a:
+Para imprimir solo IDs y coordenadas conocidas no se necesita `aruco_msgs`.
+El monitor escucha `/marker_publisher/markers_list` como `std_msgs/Int32MultiArray`.
+
+Si se quiere escuchar `/marker_publisher/markers` para obtener distancia/pose relativa, la maquina que corre el monitor debe tener instalado/sourceado `aruco_msgs`.
+Entonces usar:
 
 ```bash
-aruco_detection_topic:=/aruco_detections
-aruco_detection_type:=aruco_opencv
+aruco_detection_topic:=/marker_publisher/markers
+aruco_detection_type:=aruco_msgs
 ```
 
 ## Datos fisicos asumidos
@@ -63,18 +67,36 @@ La siguiente fase debe agregar una tabla interna o YAML con IDs y posiciones glo
 
 ```yaml
 markers:
-  0:
-    x: 0.00
-    y: 0.60
-    theta: 3.1416
-  1:
-    x: 1.20
-    y: 0.60
-    theta: 1.5708
+  70:
+    x: 1.84
+    y: -0.30
+  705:
+    x: 0.90
+    y: -1.20
+  706:
+    x: 2.39
+    y: -1.26
+  708:
+    x: 1.19
+    y: -1.21
+  703:
+    x: 1.23
+    y: -2.07
+  702:
+    x: 0.28
+    y: -1.82
+  75:
+    x: 2.74
+    y: -2.40
+  701:
+    x: 2.84
+    y: 0.00
 ```
 
 `theta` representa la orientacion del marcador en el marco global del laberinto.
 Como los marcadores estan en paredes, esta orientacion es necesaria para convertir la pose relativa vista por la camara en pose global del robot.
+
+Nota: el ID `706` fue registrado como `2.39, -126`; se asumio que la coordenada correcta es `2.39, -1.26`.
 
 ## Correccion futura de odometria
 

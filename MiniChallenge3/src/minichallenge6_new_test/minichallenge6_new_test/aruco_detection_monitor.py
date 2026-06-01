@@ -2,7 +2,20 @@
 import math
 
 import rclpy
+from rclpy import qos
 from rclpy.node import Node
+
+
+KNOWN_MARKERS = {
+    70: (1.84, -0.30),
+    705: (0.90, -1.20),
+    706: (2.39, -1.26),
+    708: (1.19, -1.21),
+    703: (1.23, -2.07),
+    702: (0.28, -1.82),
+    75: (2.74, -2.40),
+    701: (2.84, 0.00),
+}
 
 
 class ArucoDetectionMonitor(Node):
@@ -21,7 +34,16 @@ class ArucoDetectionMonitor(Node):
 
         self.last_detections = []
         self.last_detection_time = None
-        self.create_subscription(self.message_type(), self.detection_topic, self.detection_callback, 10)
+        self.received_message_count = 0
+        self.last_raw_marker_count = 0
+        msg_type = self.message_type()
+        self.create_subscription(msg_type, self.detection_topic, self.detection_callback, 10)
+        self.create_subscription(
+            msg_type,
+            self.detection_topic,
+            self.detection_callback,
+            qos.qos_profile_sensor_data,
+        )
         self.create_timer(self.diagnostic_period, self.publish_diagnostics)
 
         self.get_logger().info(
@@ -44,41 +66,93 @@ class ArucoDetectionMonitor(Node):
             from visualization_msgs.msg import MarkerArray
             return MarkerArray
 
+        if self.detection_type == 'aruco_msgs':
+            try:
+                from aruco_msgs.msg import MarkerArray
+                return MarkerArray
+            except ImportError as exc:
+                raise RuntimeError(
+                    'No pude importar aruco_msgs. Verifica el tipo real con: '
+                    'ros2 topic type /marker_publisher/markers'
+                ) from exc
+
+        if self.detection_type == 'markers_list':
+            from std_msgs.msg import Int32MultiArray
+            return Int32MultiArray
+
+        if self.detection_type == 'markers_list_u32':
+            from std_msgs.msg import UInt32MultiArray
+            return UInt32MultiArray
+
         raise RuntimeError(
-            'detection_type debe ser aruco_opencv o visualization_marker_array.'
+            'detection_type debe ser aruco_opencv, aruco_msgs, visualization_marker_array, '
+            'markers_list o markers_list_u32.'
         )
 
     def detection_callback(self, msg):
         self.last_detection_time = self.get_clock().now()
+        self.received_message_count += 1
 
         if self.detection_type == 'aruco_opencv':
+            self.last_raw_marker_count = len(msg.markers)
             self.last_detections = [
                 self.marker_record(marker.marker_id, marker.pose)
                 for marker in msg.markers
             ]
             return
 
+        if self.detection_type == 'aruco_msgs':
+            self.last_raw_marker_count = len(msg.markers)
+            self.last_detections = [
+                self.marker_record(marker.id, marker.pose.pose)
+                for marker in msg.markers
+            ]
+            return
+
+        if self.detection_type in ('markers_list', 'markers_list_u32'):
+            self.last_raw_marker_count = len(msg.data)
+            self.last_detections = [
+                self.marker_record(marker_id, None)
+                for marker_id in msg.data
+            ]
+            return
+
+        self.last_raw_marker_count = len(msg.markers)
         self.last_detections = [
             self.marker_record(marker.id, marker.pose)
             for marker in msg.markers
         ]
 
     def marker_record(self, marker_id, pose):
-        distance = math.sqrt(
-            pose.position.x ** 2 +
-            pose.position.y ** 2 +
-            pose.position.z ** 2
-        )
+        distance = None
+        if pose is not None:
+            distance = math.sqrt(
+                pose.position.x ** 2 +
+                pose.position.y ** 2 +
+                pose.position.z ** 2
+            )
+
         return {
             'id': int(marker_id),
             'pose': pose,
             'distance': distance,
             'known': not self.known_marker_ids or int(marker_id) in self.known_marker_ids,
+            'map_position': KNOWN_MARKERS.get(int(marker_id)),
         }
 
     def publish_diagnostics(self):
         if self.last_detection_time is None:
-            self.get_logger().info('Aun no recibo detecciones ArUco.')
+            self.get_logger().info(
+                f'Aun no recibo mensajes en {self.detection_topic}. '
+                'El topico existe, pero no ha llegado ningun callback al monitor.'
+            )
+            return
+
+        if self.last_raw_marker_count == 0:
+            self.get_logger().info(
+                f'Recibo mensajes en {self.detection_topic}, pero vienen sin markers. '
+                f'mensajes={self.received_message_count}'
+            )
             return
 
         detections = [item for item in self.last_detections if item['known']]
@@ -86,13 +160,51 @@ class ArucoDetectionMonitor(Node):
             self.get_logger().info('Recibi detecciones, pero ninguna coincide con known_marker_ids.')
             return
 
-        closest = min(detections, key=lambda item: item['distance'])
-        pose = closest['pose']
-        all_ids = ','.join(str(item['id']) for item in detections)
+        if all(item['distance'] is None for item in detections):
+            all_markers_text = '; '.join(
+                self.format_marker(item, selected=False)
+                for item in detections
+            )
+            self.get_logger().info(
+                f'arucos_detectados_ids_y_coordenadas: {all_markers_text}'
+            )
+            return
+
+        closest = min(
+            detections,
+            key=lambda item: item['distance'] if item['distance'] is not None else float('inf')
+        )
+        all_markers_text = '; '.join(
+            self.format_marker(item, selected=(item is closest))
+            for item in detections
+        )
+
         self.get_logger().info(
-            f'aruco_cercano id={closest["id"]}, distancia={closest["distance"]:.2f} m, '
-            f'camera_frame_pose: x={pose.position.x:.2f}, y={pose.position.y:.2f}, '
-            f'z={pose.position.z:.2f}, ids=[{all_ids}]'
+            f'aruco_detectado_mas_cercano: {self.format_marker(closest, selected=True)}'
+        )
+        self.get_logger().info(
+            f'arucos_detectados: {all_markers_text}'
+        )
+
+    def format_marker(self, marker, selected=False):
+        pose = marker['pose']
+        map_text = 'map=(desconocido)'
+        if marker['map_position'] is not None:
+            marker_x, marker_y = marker['map_position']
+            map_text = f'map=({marker_x:.2f}, {marker_y:.2f})'
+
+        selected_text = ' seleccionado' if selected else ''
+        if pose is None:
+            return f'id={marker["id"]}{selected_text}, {map_text}'
+
+        distance_text = 'dist=sin_pose'
+        if marker['distance'] is not None:
+            distance_text = f'dist={marker["distance"]:.2f}m'
+
+        return (
+            f'id={marker["id"]}{selected_text}, {map_text}, '
+            f'{distance_text}, '
+            f'cam=(x={pose.position.x:.2f}, y={pose.position.y:.2f}, z={pose.position.z:.2f})'
         )
 
 
