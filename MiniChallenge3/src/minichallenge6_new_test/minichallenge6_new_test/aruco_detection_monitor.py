@@ -64,11 +64,6 @@ class ArucoDetectionMonitor(Node):
         )
         self.create_timer(self.diagnostic_period, self.publish_diagnostics)
 
-        self.get_logger().info(
-            f'Monitor ArUco escuchando {self.detection_topic} como {self.detection_type}. '
-            'Solo reporta detecciones; no corrige odometria.'
-        )
-
     def message_type(self):
         if self.detection_type == 'aruco_opencv':
             try:
@@ -165,9 +160,9 @@ class ArucoDetectionMonitor(Node):
         tx, ty, tz = self.camera_to_base_translation
 
         robot_position = (
-            position.z + tx,
-            -position.x + ty,
-            -position.y + tz,
+            position.z - tx,
+            -position.x - ty,
+            -position.y - tz,
         )
         robot_orientation = self.normalize_quaternion(
             self.multiply_quaternions(
@@ -241,48 +236,35 @@ class ArucoDetectionMonitor(Node):
 
     def publish_diagnostics(self):
         if self.last_detection_time is None:
-            self.get_logger().info(
-                f'Aun no recibo mensajes en {self.detection_topic}. '
-                'El topico existe, pero no ha llegado ningun callback al monitor.'
-            )
             return
 
         if self.last_raw_marker_count == 0:
-            self.get_logger().info(
-                f'Recibo mensajes en {self.detection_topic}, pero vienen sin markers. '
-                f'mensajes={self.received_message_count}'
-            )
             return
 
         detections = [item for item in self.last_detections if item['known']]
         if not detections:
-            self.get_logger().info('Recibi detecciones, pero ninguna coincide con known_marker_ids.')
             return
 
         if all(item['distance'] is None for item in detections):
-            all_markers_text = '; '.join(
-                self.format_marker(item, selected=False)
-                for item in detections
-            )
-            self.get_logger().info(
-                f'arucos_detectados_ids_y_coordenadas: {all_markers_text}'
-            )
             return
 
         closest = min(
             detections,
             key=lambda item: item['distance'] if item['distance'] is not None else float('inf')
         )
-        all_markers_text = '; '.join(
-            self.format_marker(item, selected=(item is closest))
-            for item in detections
-        )
+        self.get_logger().info(self.format_robot_pose(closest))
 
-        self.get_logger().info(
-            f'aruco_detectado_mas_cercano: {self.format_marker(closest, selected=True)}'
-        )
-        self.get_logger().info(
-            f'arucos_detectados: {all_markers_text}'
+    def format_robot_pose(self, marker):
+        robot_pose = marker['robot_pose']
+        if robot_pose is None:
+            return 'robot=sin_pose'
+
+        robot_x, robot_y, robot_z = robot_pose['position']
+        robot_qx, robot_qy, robot_qz, robot_qw = robot_pose['orientation']
+        return (
+            f'robot=(x={robot_x:.3f}, y={robot_y:.3f}, z={robot_z:.3f}, '
+            f'qx={robot_qx:.3f}, qy={robot_qy:.3f}, '
+            f'qz={robot_qz:.3f}, qw={robot_qw:.3f})'
         )
 
     def format_marker(self, marker, selected=False):

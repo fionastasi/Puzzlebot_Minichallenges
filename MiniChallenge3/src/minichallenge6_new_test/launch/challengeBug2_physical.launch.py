@@ -34,15 +34,34 @@ def generate_launch_description():
     aruco_marker_size = LaunchConfiguration('aruco_marker_size')
     aruco_detection_topic = LaunchConfiguration('aruco_detection_topic')
     aruco_detection_type = LaunchConfiguration('aruco_detection_type')
-
-    common_parameters = [{'use_sim_time': False}]
+    odom_offset_x = LaunchConfiguration('odom_offset_x')
+    odom_offset_y = LaunchConfiguration('odom_offset_y')
+    odom_offset_theta = LaunchConfiguration('odom_offset_theta')
+    use_aruco_correction = LaunchConfiguration('use_aruco_correction')
+    camera_offset_x = LaunchConfiguration('camera_offset_x')
+    camera_offset_y = LaunchConfiguration('camera_offset_y')
+    camera_offset_z = LaunchConfiguration('camera_offset_z')
+    aruco_measurement_std_x = LaunchConfiguration('aruco_measurement_std_x')
+    aruco_measurement_std_y = LaunchConfiguration('aruco_measurement_std_y')
 
     localisation = Node(
         package=package_name,
         executable='localisation',
         name='localisation',
         output='screen',
-        parameters=common_parameters,
+        parameters=[
+            {'use_sim_time': False},
+            {'odom_offset_x': ParameterValue(odom_offset_x, value_type=float)},
+            {'odom_offset_y': ParameterValue(odom_offset_y, value_type=float)},
+            {'odom_offset_theta': ParameterValue(odom_offset_theta, value_type=float)},
+            {'use_aruco_correction': ParameterValue(use_aruco_correction, value_type=bool)},
+            {'aruco_detection_topic': aruco_detection_topic},
+            {'camera_offset_x': ParameterValue(camera_offset_x, value_type=float)},
+            {'camera_offset_y': ParameterValue(camera_offset_y, value_type=float)},
+            {'camera_offset_z': ParameterValue(camera_offset_z, value_type=float)},
+            {'aruco_measurement_std_x': ParameterValue(aruco_measurement_std_x, value_type=float)},
+            {'aruco_measurement_std_y': ParameterValue(aruco_measurement_std_y, value_type=float)},
+        ],
         condition=IfCondition(use_localisation),
         remappings=[
             ('odom', odom_topic),
@@ -100,6 +119,9 @@ def generate_launch_description():
         parameters=[
             {'detection_topic': aruco_detection_topic},
             {'detection_type': aruco_detection_type},
+            {'camera_offset_x': ParameterValue(camera_offset_x, value_type=float)},
+            {'camera_offset_y': ParameterValue(camera_offset_y, value_type=float)},
+            {'camera_offset_z': ParameterValue(camera_offset_z, value_type=float)},
         ],
     )
 
@@ -211,6 +233,26 @@ def generate_launch_description():
             description='Arranca monitor propio que reporta el ArUco mas cercano sin corregir odometria.',
         ),
         DeclareLaunchArgument(
+            'use_aruco_correction',
+            default_value='true',
+            description='Activa correccion EKF de localisation usando detecciones ArUco.',
+        ),
+        DeclareLaunchArgument(
+            'odom_offset_x',
+            default_value='0.295',
+            description='Offset inicial x del robot dentro del mapa.',
+        ),
+        DeclareLaunchArgument(
+            'odom_offset_y',
+            default_value='0.29',
+            description='Offset inicial y del robot dentro del mapa.',
+        ),
+        DeclareLaunchArgument(
+            'odom_offset_theta',
+            default_value='0.0',
+            description='Offset inicial de yaw del robot en radianes.',
+        ),
+        DeclareLaunchArgument(
             'aruco_cam_base_topic',
             default_value='/image_raw',
             description='Topico base de imagen usado por aruco_opencv.',
@@ -229,6 +271,31 @@ def generate_launch_description():
             'aruco_detection_type',
             default_value='aruco_msgs',
             description='Tipo de deteccion: markers_list, markers_list_u32, aruco_msgs, visualization_marker_array o aruco_opencv.',
+        ),
+        DeclareLaunchArgument(
+            'camera_offset_x',
+            default_value='0.1241',
+            description='Distancia de base_link a camara en x.',
+        ),
+        DeclareLaunchArgument(
+            'camera_offset_y',
+            default_value='0.0',
+            description='Distancia de base_link a camara en y.',
+        ),
+        DeclareLaunchArgument(
+            'camera_offset_z',
+            default_value='0.067',
+            description='Distancia de base_link a camara en z.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_measurement_std_x',
+            default_value='0.08',
+            description='Desviacion estandar de medicion ArUco en x para el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_measurement_std_y',
+            default_value='0.08',
+            description='Desviacion estandar de medicion ArUco en y para el EKF.',
         ),
         localisation,
         aruco_tracker,
