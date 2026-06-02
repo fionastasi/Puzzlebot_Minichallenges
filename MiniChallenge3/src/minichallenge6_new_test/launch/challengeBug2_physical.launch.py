@@ -21,6 +21,16 @@ def generate_launch_description():
     front_stop_distance = LaunchConfiguration('front_stop_distance')
     avoidance_start_distance = LaunchConfiguration('avoidance_start_distance')
     wall_follow_start_distance = LaunchConfiguration('wall_follow_start_distance')
+    wall_follow_side = LaunchConfiguration('wall_follow_side')
+    wall_too_close = LaunchConfiguration('wall_too_close')
+    wall_lost_distance = LaunchConfiguration('wall_lost_distance')
+    wall_follow_speed = LaunchConfiguration('wall_follow_speed')
+    wall_follow_kp = LaunchConfiguration('wall_follow_kp')
+    wall_front_kp = LaunchConfiguration('wall_front_kp')
+    wall_follow_deadband = LaunchConfiguration('wall_follow_deadband')
+    wall_search_angular_speed = LaunchConfiguration('wall_search_angular_speed')
+    wall_corner_angular_speed = LaunchConfiguration('wall_corner_angular_speed')
+    wall_command_alpha = LaunchConfiguration('wall_command_alpha')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
     wall_follow_goal_tolerance = LaunchConfiguration('wall_follow_goal_tolerance')
     goal_pass_margin = LaunchConfiguration('goal_pass_margin')
@@ -37,12 +47,10 @@ def generate_launch_description():
     odom_offset_x = LaunchConfiguration('odom_offset_x')
     odom_offset_y = LaunchConfiguration('odom_offset_y')
     odom_offset_theta = LaunchConfiguration('odom_offset_theta')
-    use_aruco_correction = LaunchConfiguration('use_aruco_correction')
+    publish_without_fresh_encoders = LaunchConfiguration('publish_without_fresh_encoders')
     camera_offset_x = LaunchConfiguration('camera_offset_x')
     camera_offset_y = LaunchConfiguration('camera_offset_y')
     camera_offset_z = LaunchConfiguration('camera_offset_z')
-    aruco_measurement_std_x = LaunchConfiguration('aruco_measurement_std_x')
-    aruco_measurement_std_y = LaunchConfiguration('aruco_measurement_std_y')
 
     localisation = Node(
         package=package_name,
@@ -54,13 +62,7 @@ def generate_launch_description():
             {'odom_offset_x': ParameterValue(odom_offset_x, value_type=float)},
             {'odom_offset_y': ParameterValue(odom_offset_y, value_type=float)},
             {'odom_offset_theta': ParameterValue(odom_offset_theta, value_type=float)},
-            {'use_aruco_correction': ParameterValue(use_aruco_correction, value_type=bool)},
-            {'aruco_detection_topic': aruco_detection_topic},
-            {'camera_offset_x': ParameterValue(camera_offset_x, value_type=float)},
-            {'camera_offset_y': ParameterValue(camera_offset_y, value_type=float)},
-            {'camera_offset_z': ParameterValue(camera_offset_z, value_type=float)},
-            {'aruco_measurement_std_x': ParameterValue(aruco_measurement_std_x, value_type=float)},
-            {'aruco_measurement_std_y': ParameterValue(aruco_measurement_std_y, value_type=float)},
+            {'publish_without_fresh_encoders': ParameterValue(publish_without_fresh_encoders, value_type=bool)},
         ],
         condition=IfCondition(use_localisation),
         remappings=[
@@ -82,6 +84,16 @@ def generate_launch_description():
             {'front_stop_distance': ParameterValue(front_stop_distance, value_type=float)},
             {'avoidance_start_distance': ParameterValue(avoidance_start_distance, value_type=float)},
             {'wall_follow_start_distance': ParameterValue(wall_follow_start_distance, value_type=float)},
+            {'wall_follow_side': wall_follow_side},
+            {'wall_too_close': ParameterValue(wall_too_close, value_type=float)},
+            {'wall_lost_distance': ParameterValue(wall_lost_distance, value_type=float)},
+            {'wall_follow_speed': ParameterValue(wall_follow_speed, value_type=float)},
+            {'wall_follow_kp': ParameterValue(wall_follow_kp, value_type=float)},
+            {'wall_front_kp': ParameterValue(wall_front_kp, value_type=float)},
+            {'wall_follow_deadband': ParameterValue(wall_follow_deadband, value_type=float)},
+            {'wall_search_angular_speed': ParameterValue(wall_search_angular_speed, value_type=float)},
+            {'wall_corner_angular_speed': ParameterValue(wall_corner_angular_speed, value_type=float)},
+            {'wall_command_alpha': ParameterValue(wall_command_alpha, value_type=float)},
             {'goal_tolerance': ParameterValue(goal_tolerance, value_type=float)},
             {'wall_follow_goal_tolerance': ParameterValue(wall_follow_goal_tolerance, value_type=float)},
             {'goal_pass_margin': ParameterValue(goal_pass_margin, value_type=float)},
@@ -188,6 +200,56 @@ def generate_launch_description():
             description='Distancia frontal para registrar impacto y cambiar a WALL_FOLLOWING.',
         ),
         DeclareLaunchArgument(
+            'wall_follow_side',
+            default_value='right',
+            description='Lado de seguimiento de pared: right o left.',
+        ),
+        DeclareLaunchArgument(
+            'wall_too_close',
+            default_value='0.11',
+            description='Distancia lateral minima antes de girar para separarse de la pared.',
+        ),
+        DeclareLaunchArgument(
+            'wall_lost_distance',
+            default_value='0.35',
+            description='Distancia lateral a partir de la cual se considera que se perdio la pared.',
+        ),
+        DeclareLaunchArgument(
+            'wall_follow_speed',
+            default_value='0.035',
+            description='Velocidad lineal durante WALL_FOLLOWING.',
+        ),
+        DeclareLaunchArgument(
+            'wall_follow_kp',
+            default_value='1.2',
+            description='Ganancia proporcional para mantener distancia lateral a la pared.',
+        ),
+        DeclareLaunchArgument(
+            'wall_front_kp',
+            default_value='0.7',
+            description='Ganancia extra para abrirse cuando la esquina frontal del lado elegido esta cerca.',
+        ),
+        DeclareLaunchArgument(
+            'wall_follow_deadband',
+            default_value='0.025',
+            description='Banda muerta lateral para evitar oscilaciones pequenas siguiendo pared.',
+        ),
+        DeclareLaunchArgument(
+            'wall_search_angular_speed',
+            default_value='0.18',
+            description='Velocidad angular para buscar la pared cuando se pierde lateralmente.',
+        ),
+        DeclareLaunchArgument(
+            'wall_corner_angular_speed',
+            default_value='0.30',
+            description='Velocidad angular al enfrentar esquina u obstaculo frontal en WALL_FOLLOWING.',
+        ),
+        DeclareLaunchArgument(
+            'wall_command_alpha',
+            default_value='0.35',
+            description='Suavizado de comandos de pared: 1.0 sin suavizado, menor es mas suave.',
+        ),
+        DeclareLaunchArgument(
             'goal_tolerance',
             default_value='0.05',
             description='Radio en metros para considerar alcanzada la meta.',
@@ -233,11 +295,6 @@ def generate_launch_description():
             description='Arranca monitor propio que reporta el ArUco mas cercano sin corregir odometria.',
         ),
         DeclareLaunchArgument(
-            'use_aruco_correction',
-            default_value='true',
-            description='Activa correccion EKF de localisation usando detecciones ArUco.',
-        ),
-        DeclareLaunchArgument(
             'odom_offset_x',
             default_value='0.295',
             description='Offset inicial x del robot dentro del mapa.',
@@ -251,6 +308,11 @@ def generate_launch_description():
             'odom_offset_theta',
             default_value='0.0',
             description='Offset inicial de yaw del robot en radianes.',
+        ),
+        DeclareLaunchArgument(
+            'publish_without_fresh_encoders',
+            default_value='true',
+            description='Mantiene odom publicado con velocidad cero aunque los encoders no lleguen recientes.',
         ),
         DeclareLaunchArgument(
             'aruco_cam_base_topic',
@@ -286,16 +348,6 @@ def generate_launch_description():
             'camera_offset_z',
             default_value='0.067',
             description='Distancia de base_link a camara en z.',
-        ),
-        DeclareLaunchArgument(
-            'aruco_measurement_std_x',
-            default_value='0.08',
-            description='Desviacion estandar de medicion ArUco en x para el EKF.',
-        ),
-        DeclareLaunchArgument(
-            'aruco_measurement_std_y',
-            default_value='0.08',
-            description='Desviacion estandar de medicion ArUco en y para el EKF.',
         ),
         localisation,
         aruco_tracker,

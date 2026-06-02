@@ -82,7 +82,16 @@ class Bug2Node(Node):
         self.declare_parameter('avoidance_start_distance', 0.30)
         self.declare_parameter('wall_follow_start_distance', 0.24)
         self.declare_parameter('wall_distance', 0.16)
-        self.declare_parameter('right_too_close', 0.11)
+        self.declare_parameter('wall_follow_side', 'right')
+        self.declare_parameter('wall_too_close', 0.11)
+        self.declare_parameter('wall_lost_distance', 0.35)
+        self.declare_parameter('wall_follow_speed', 0.035)
+        self.declare_parameter('wall_follow_kp', 1.2)
+        self.declare_parameter('wall_front_kp', 0.7)
+        self.declare_parameter('wall_follow_deadband', 0.025)
+        self.declare_parameter('wall_search_angular_speed', 0.18)
+        self.declare_parameter('wall_corner_angular_speed', 0.30)
+        self.declare_parameter('wall_command_alpha', 0.35)
         self.declare_parameter('avoidance_kv', 0.5)
         self.declare_parameter('avoidance_kw', 0.7)
         self.declare_parameter('sensor_timeout', 1.0)
@@ -111,7 +120,23 @@ class Bug2Node(Node):
         self.avoidance_start_distance = self.get_parameter('avoidance_start_distance').value
         self.wall_follow_start_distance = self.get_parameter('wall_follow_start_distance').value
         self.wall_distance = self.get_parameter('wall_distance').value
-        self.right_too_close = self.get_parameter('right_too_close').value
+        self.wall_follow_side = self.get_parameter('wall_follow_side').value.lower()
+        if self.wall_follow_side not in ('right', 'left'):
+            self.get_logger().warn(
+                f'wall_follow_side="{self.wall_follow_side}" no valido. Usando "right".'
+            )
+            self.wall_follow_side = 'right'
+        self.wall_too_close = self.get_parameter('wall_too_close').value
+        self.wall_lost_distance = self.get_parameter('wall_lost_distance').value
+        self.wall_follow_speed = self.get_parameter('wall_follow_speed').value
+        self.wall_follow_kp = self.get_parameter('wall_follow_kp').value
+        self.wall_front_kp = self.get_parameter('wall_front_kp').value
+        self.wall_follow_deadband = self.get_parameter('wall_follow_deadband').value
+        self.wall_search_angular_speed = self.get_parameter('wall_search_angular_speed').value
+        self.wall_corner_angular_speed = self.get_parameter('wall_corner_angular_speed').value
+        self.wall_command_alpha = self.get_parameter('wall_command_alpha').value
+        self.last_wall_linear = 0.0
+        self.last_wall_angular = 0.0
         self.avoidance_kv = self.get_parameter('avoidance_kv').value
         self.avoidance_kw = self.get_parameter('avoidance_kw').value
         self.sensor_timeout = self.get_parameter('sensor_timeout').value
@@ -217,6 +242,19 @@ class Bug2Node(Node):
         self.cmd_pub.publish(Twist())
         self.goal_received = False
 
+    def check_goal_priority(self, odom_age):
+        if odom_age is None or odom_age > self.sensor_timeout:
+            return False
+
+        dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+        self.best_dist_to_goal = min(self.best_dist_to_goal, dist_to_goal)
+        should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
+        if should_stop:
+            self.stop_at_goal(stop_reason)
+            return True
+
+        return False
+
     def is_path_to_goal_clear(self, err_theta):
         return (
             self.sector_min(err_theta, math.radians(15)) > self.front_slow_distance and
@@ -228,6 +266,8 @@ class Bug2Node(Node):
         self.hit_x = self.x
         self.hit_y = self.y
         self.left_hit_region = False
+        self.last_wall_linear = 0.0
+        self.last_wall_angular = 0.0
         self.get_logger().info(
             f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
             f'a {self.hit_distance:.2f} m.'
@@ -254,6 +294,57 @@ class Bug2Node(Node):
             self.w_max,
         )
 
+    def wall_follow_geometry(self):
+        if self.wall_follow_side == 'left':
+            return self.regions['fleft'], self.regions['left'], 1.0
+        return self.regions['fright'], self.regions['right'], -1.0
+
+    def smooth_wall_command(self, msg, target_linear, target_angular):
+        alpha = self.clamp(self.wall_command_alpha, 0.0, 1.0)
+        self.last_wall_linear = alpha * target_linear + (1.0 - alpha) * self.last_wall_linear
+        self.last_wall_angular = alpha * target_angular + (1.0 - alpha) * self.last_wall_angular
+        msg.linear.x = self.last_wall_linear
+        msg.angular.z = self.clamp(self.last_wall_angular, -self.w_max, self.w_max)
+
+    def set_wall_follow_command(self, msg, closest_front_range, closest_front_angle):
+        front_side_region, side_region, side_sign = self.wall_follow_geometry()
+        away_turn = -side_sign
+        toward_turn = side_sign
+
+        front_distance = min(
+            self.regions['front'],
+            closest_front_range if closest_front_range is not None else 10.0,
+        )
+
+        if front_distance < self.front_stop_distance:
+            self.smooth_wall_command(msg, 0.0, away_turn * self.wall_corner_angular_speed)
+            return
+
+        if front_side_region < self.wall_too_close:
+            self.smooth_wall_command(msg, 0.02, away_turn * self.wall_corner_angular_speed)
+            return
+
+        if side_region > self.wall_lost_distance:
+            self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
+            return
+
+        wall_error = side_region - self.wall_distance
+        if abs(wall_error) < self.wall_follow_deadband:
+            wall_error = 0.0
+
+        front_error = max(0.0, self.wall_distance - front_side_region)
+        target_angular = (
+            side_sign * self.wall_follow_kp * wall_error -
+            side_sign * self.wall_front_kp * front_error
+        )
+        target_linear = self.wall_follow_speed
+        if front_side_region < self.wall_distance:
+            target_linear *= 0.7
+        if side_region < self.wall_too_close:
+            target_linear *= 0.7
+
+        self.smooth_wall_command(msg, target_linear, target_angular)
+
     def control_loop(self):
         if not self.goal_received:
             return
@@ -263,13 +354,8 @@ class Bug2Node(Node):
         odom_age = self.message_age(now, self.last_odom_time)
         scan_age = self.message_age(now, self.last_scan_time)
 
-        if odom_age is not None and odom_age <= self.sensor_timeout:
-            dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
-            self.best_dist_to_goal = min(self.best_dist_to_goal, dist_to_goal)
-            should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
-            if should_stop:
-                self.stop_at_goal(stop_reason)
-                return
+        if self.check_goal_priority(odom_age):
+            return
 
         if not self.sensors_ready(odom_age, scan_age):
             self.cmd_pub.publish(msg)
@@ -328,7 +414,8 @@ class Bug2Node(Node):
 
         if self.state == 'GO_TO_GOAL':
             if closest_front_range is not None and closest_front_range < self.avoidance_start_distance:
-                self.set_avoidance_command(msg, closest_front_range, closest_front_angle)
+                self.enter_wall_following(dist_to_goal)
+                self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
             elif abs(err_theta) > self.heading_tolerance:
                 msg.angular.z = self.clamp(self.k_alpha * err_theta, -self.w_max, self.w_max)
                 heading_factor = max(0.0, math.cos(err_theta))
@@ -351,24 +438,7 @@ class Bug2Node(Node):
                 msg.linear.x *= self.clamp(clearance / slow_band, 0.0, 1.0)
 
         elif self.state == 'WALL_FOLLOWING':
-            if self.regions['front'] < self.front_stop_distance:
-                msg.linear.x = 0.0
-                msg.angular.z = self.w_max
-            elif closest_front_range is not None and closest_front_range < self.front_stop_distance:
-                self.set_avoidance_command(msg, closest_front_range, closest_front_angle)
-            elif self.regions['fright'] < self.wall_distance:
-                msg.linear.x = 0.025
-                msg.angular.z = 0.22
-            elif self.regions['right'] < self.wall_distance:
-                if self.regions['right'] < self.right_too_close:
-                    msg.linear.x = 0.03
-                    msg.angular.z = 0.18
-                else:
-                    msg.linear.x = 0.04
-                    msg.angular.z = -0.03
-            else:
-                msg.linear.x = 0.02
-                msg.angular.z = -self.w_max
+            self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
 
         self.cmd_pub.publish(msg)
         self.publish_diagnostics(msg, dist_to_goal, err_theta, odom_age, scan_age)
@@ -399,6 +469,7 @@ class Bug2Node(Node):
         self.get_logger().info(
             f'cmd_vel: v={cmd_msg.linear.x:.2f}, w={cmd_msg.angular.z:.2f}, '
             f'estado={self.state}, dist={dist_text}, err_theta={err_text}, '
+            f'wall_side={self.wall_follow_side}, '
             f'odom_age={self.format_age(odom_age)}, scan_age={self.format_age(scan_age)}, '
             f'closest={self.format_closest()}, regions={self.format_regions()}'
         )

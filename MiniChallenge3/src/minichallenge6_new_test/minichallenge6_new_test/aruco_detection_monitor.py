@@ -160,9 +160,9 @@ class ArucoDetectionMonitor(Node):
         tx, ty, tz = self.camera_to_base_translation
 
         robot_position = (
-            position.z - tx,
-            -position.x - ty,
-            -position.y - tz,
+            position.z + tx,
+            -position.x + ty,
+            -position.y + tz,
         )
         robot_orientation = self.normalize_quaternion(
             self.multiply_quaternions(
@@ -257,12 +257,12 @@ class ArucoDetectionMonitor(Node):
     def format_robot_pose(self, marker):
         robot_pose = marker['robot_pose']
         if robot_pose is None:
-            return 'robot=sin_pose'
+            return 'aruco_en_robot=sin_pose'
 
         robot_x, robot_y, robot_z = robot_pose['position']
         robot_qx, robot_qy, robot_qz, robot_qw = robot_pose['orientation']
         return (
-            f'robot=(x={robot_x:.3f}, y={robot_y:.3f}, z={robot_z:.3f}, '
+            f'aruco_en_robot=(x={robot_x:.3f}, y={robot_y:.3f}, z={robot_z:.3f}, '
             f'qx={robot_qx:.3f}, qy={robot_qy:.3f}, '
             f'qz={robot_qz:.3f}, qw={robot_qw:.3f})'
         )
