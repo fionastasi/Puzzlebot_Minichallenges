@@ -24,6 +24,8 @@ def generate_launch_description():
     avoidance_start_distance = LaunchConfiguration('avoidance_start_distance')
     wall_follow_start_distance = LaunchConfiguration('wall_follow_start_distance')
     wall_follow_side = LaunchConfiguration('wall_follow_side')
+    start_with_wall_acquisition = LaunchConfiguration('start_with_wall_acquisition')
+    wall_acquire_distance = LaunchConfiguration('wall_acquire_distance')
     wall_too_close = LaunchConfiguration('wall_too_close')
     wall_lost_distance = LaunchConfiguration('wall_lost_distance')
     wall_follow_speed = LaunchConfiguration('wall_follow_speed')
@@ -100,6 +102,8 @@ def generate_launch_description():
             {'avoidance_start_distance': ParameterValue(avoidance_start_distance, value_type=float)},
             {'wall_follow_start_distance': ParameterValue(wall_follow_start_distance, value_type=float)},
             {'wall_follow_side': wall_follow_side},
+            {'start_with_wall_acquisition': ParameterValue(start_with_wall_acquisition, value_type=bool)},
+            {'wall_acquire_distance': ParameterValue(wall_acquire_distance, value_type=float)},
             {'wall_too_close': ParameterValue(wall_too_close, value_type=float)},
             {'wall_lost_distance': ParameterValue(wall_lost_distance, value_type=float)},
             {'wall_follow_speed': ParameterValue(wall_follow_speed, value_type=float)},
@@ -260,6 +264,16 @@ def generate_launch_description():
             'wall_follow_side',
             default_value='right',
             description='Lado de seguimiento de pared: right o left.',
+        ),
+        DeclareLaunchArgument(
+            'start_with_wall_acquisition',
+            default_value='true',
+            description='Si es true, al recibir una meta primero se acerca a la pared configurada antes de comportamiento Bug2 normal.',
+        ),
+        DeclareLaunchArgument(
+            'wall_acquire_distance',
+            default_value='0.22',
+            description='Distancia lateral para considerar adquirida la pared elegida antes de hacer seguimiento fino.',
         ),
         DeclareLaunchArgument(
             'wall_too_close',

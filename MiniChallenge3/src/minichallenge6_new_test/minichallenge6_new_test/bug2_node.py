@@ -84,6 +84,8 @@ class Bug2Node(Node):
         self.declare_parameter('wall_follow_start_distance', 0.24)
         self.declare_parameter('wall_distance', 0.16)
         self.declare_parameter('wall_follow_side', 'right')
+        self.declare_parameter('start_with_wall_acquisition', True)
+        self.declare_parameter('wall_acquire_distance', 0.22)
         self.declare_parameter('wall_too_close', 0.11)
         self.declare_parameter('wall_lost_distance', 0.35)
         self.declare_parameter('wall_follow_speed', 0.035)
@@ -128,6 +130,8 @@ class Bug2Node(Node):
                 f'wall_follow_side="{self.wall_follow_side}" no valido. Usando "right".'
             )
             self.wall_follow_side = 'right'
+        self.start_with_wall_acquisition = self.get_parameter('start_with_wall_acquisition').value
+        self.wall_acquire_distance = self.get_parameter('wall_acquire_distance').value
         self.wall_too_close = self.get_parameter('wall_too_close').value
         self.wall_lost_distance = self.get_parameter('wall_lost_distance').value
         self.wall_follow_speed = self.get_parameter('wall_follow_speed').value
@@ -139,6 +143,7 @@ class Bug2Node(Node):
         self.wall_command_alpha = self.get_parameter('wall_command_alpha').value
         self.last_wall_linear = 0.0
         self.last_wall_angular = 0.0
+        self.wall_acquired = False
         self.avoidance_kv = self.get_parameter('avoidance_kv').value
         self.avoidance_kw = self.get_parameter('avoidance_kw').value
         self.sensor_timeout = self.get_parameter('sensor_timeout').value
@@ -277,17 +282,24 @@ class Bug2Node(Node):
 
         return obstacle_distance < self.wall_follow_start_distance
 
-    def enter_wall_following(self, dist_to_goal):
+    def enter_wall_following(self, dist_to_goal, initial_acquisition=False):
         self.hit_distance = dist_to_goal
         self.hit_x = self.x
         self.hit_y = self.y
         self.left_hit_region = False
         self.last_wall_linear = 0.0
         self.last_wall_angular = 0.0
-        self.get_logger().info(
-            f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
-            f'a {self.hit_distance:.2f} m.'
-        )
+        self.wall_acquired = False
+        if initial_acquisition:
+            self.get_logger().info(
+                f'Adquisicion inicial de pared {self.wall_follow_side} desde '
+                f'({self.hit_x:.2f}, {self.hit_y:.2f}); meta a {self.hit_distance:.2f} m.'
+            )
+        else:
+            self.get_logger().info(
+                f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
+                f'a {self.hit_distance:.2f} m.'
+            )
         self.change_state('WALL_FOLLOWING')
 
     def set_avoidance_command(self, msg, closest_range, theta_closest):
@@ -336,11 +348,19 @@ class Bug2Node(Node):
             self.smooth_wall_command(msg, 0.0, away_turn * self.wall_corner_angular_speed)
             return
 
+        if not self.wall_acquired:
+            if side_region <= self.wall_acquire_distance:
+                self.wall_acquired = True
+            else:
+                self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
+                return
+
         if front_side_region < self.wall_too_close:
             self.smooth_wall_command(msg, 0.02, away_turn * self.wall_corner_angular_speed)
             return
 
         if side_region > self.wall_lost_distance:
+            self.wall_acquired = False
             self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
             return
 
@@ -487,6 +507,7 @@ class Bug2Node(Node):
             f'cmd_vel: v={cmd_msg.linear.x:.2f}, w={cmd_msg.angular.z:.2f}, '
             f'estado={self.state}, dist={dist_text}, err_theta={err_text}, '
             f'path_front={path_front_text}, wall_side={self.wall_follow_side}, '
+            f'wall_acquired={self.wall_acquired}, '
             f'odom_age={self.format_age(odom_age)}, scan_age={self.format_age(scan_age)}, '
             f'closest={self.format_closest()}, regions={self.format_regions()}'
         )
@@ -530,8 +551,12 @@ class Bug2Node(Node):
         self.left_hit_region = False
         self.best_dist_to_goal = float('inf')
         self.goal_received = True
-        self.change_state('GO_TO_GOAL')
         self.get_logger().info(f'Bug2 Meta: x={self.target_x}, y={self.target_y}. Linea M trazada.')
+        if self.start_with_wall_acquisition:
+            dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+            self.enter_wall_following(dist_to_goal, initial_acquisition=True)
+        else:
+            self.change_state('GO_TO_GOAL')
 
     def scan_callback(self, msg):
         self.last_scan_time = self.get_clock().now()
