@@ -280,7 +280,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_acquire_distance',
-            default_value='0.22',
+            default_value='0.20',
             description='Distancia lateral para considerar adquirida la pared elegida antes de hacer seguimiento fino.',
         ),
         DeclareLaunchArgument(
@@ -290,12 +290,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_lost_distance',
-            default_value='0.35',
+            default_value='0.25',
             description='Distancia lateral a partir de la cual se considera que se perdio la pared.',
         ),
         DeclareLaunchArgument(
             'wall_follow_speed',
-            default_value='0.10',
+            default_value='0.15',
             description='Velocidad lineal durante WALL_FOLLOWING.',
         ),
         DeclareLaunchArgument(
@@ -315,23 +315,23 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_search_angular_speed',
-            default_value='0.18',
+            default_value='0.25',
             description='Velocidad angular para buscar la pared cuando se pierde lateralmente.',
         ),
         DeclareLaunchArgument(
             'wall_recovery_forward_distance',
-            default_value='0.10',
-            description='Distancia en metros que avanza al perder la pared elegida antes de girar.',
+            default_value='0.05',
+            description='Distancia en metros que avanza despues de girar al perder la pared elegida.',
         ),
         DeclareLaunchArgument(
             'wall_recovery_forward_speed',
-            default_value='0.035',
+            default_value='0.10',
             description='Velocidad lineal durante el avance de recuperacion de pared perdida.',
         ),
         DeclareLaunchArgument(
             'wall_recovery_turn_angle',
-            default_value='1.5708',
-            description='Angulo en radianes del giro hacia la pared elegida durante recuperacion.',
+            default_value='2.0',
+            description='Angulo en radianes del primer giro hacia la pared elegida durante recuperacion.',
         ),
         DeclareLaunchArgument(
             'wall_recovery_turn_speed',

@@ -85,9 +85,9 @@ class Bug2Node(Node):
         self.declare_parameter('wall_distance', 0.16)
         self.declare_parameter('wall_follow_side', 'right')
         self.declare_parameter('start_with_wall_acquisition', True)
-        self.declare_parameter('wall_acquire_distance', 0.22)
+        self.declare_parameter('wall_acquire_distance', 0.18)
         self.declare_parameter('wall_too_close', 0.11)
-        self.declare_parameter('wall_lost_distance', 0.35)
+        self.declare_parameter('wall_lost_distance', 0.27)
         self.declare_parameter('wall_follow_speed', 0.10)
         self.declare_parameter('wall_follow_kp', 1.2)
         self.declare_parameter('wall_front_kp', 0.7)
@@ -152,6 +152,7 @@ class Bug2Node(Node):
         self.last_wall_linear = 0.0
         self.last_wall_angular = 0.0
         self.wall_acquired = False
+        self.initial_wall_acquisition = False
         self.wall_recovery_phase = 'none'
         self.wall_recovery_start_x = 0.0
         self.wall_recovery_start_y = 0.0
@@ -302,6 +303,7 @@ class Bug2Node(Node):
         self.last_wall_linear = 0.0
         self.last_wall_angular = 0.0
         self.wall_acquired = False
+        self.initial_wall_acquisition = initial_acquisition
         self.reset_wall_recovery()
         if initial_acquisition:
             self.get_logger().info(
@@ -315,6 +317,20 @@ class Bug2Node(Node):
             )
         self.change_state('WALL_FOLLOWING')
 
+    def finish_initial_wall_acquisition(self):
+        if not self.initial_wall_acquisition:
+            return
+
+        self.initial_wall_acquisition = False
+        self.hit_x = self.x
+        self.hit_y = self.y
+        self.hit_distance = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+        self.left_hit_region = False
+        self.get_logger().info(
+            f'Pared {self.wall_follow_side} adquirida. Punto de seguimiento reiniciado en '
+            f'({self.hit_x:.2f}, {self.hit_y:.2f}) a {self.hit_distance:.2f} m de la meta.'
+        )
+
     def reset_wall_recovery(self):
         self.wall_recovery_phase = 'none'
         self.wall_recovery_start_x = self.x
@@ -326,10 +342,18 @@ class Bug2Node(Node):
         self.wall_recovery_start_x = self.x
         self.wall_recovery_start_y = self.y
         self.wall_recovery_start_theta = self.theta
+        self.get_logger().info(
+            f'Recuperacion pared {self.wall_follow_side}: avanzando '
+            f'{self.wall_recovery_forward_distance:.2f} m.'
+        )
 
     def start_wall_recovery_turn(self):
         self.wall_recovery_phase = 'turn'
         self.wall_recovery_start_theta = self.theta
+        self.get_logger().info(
+            f'Recuperacion pared {self.wall_follow_side}: girando '
+            f'{math.degrees(self.wall_recovery_turn_angle):.0f} grados.'
+        )
 
     def wall_recovery_turn_direction(self):
         return 1.0 if self.wall_follow_side == 'left' else -1.0
@@ -338,24 +362,11 @@ class Bug2Node(Node):
         if side_region <= self.wall_acquire_distance:
             self.wall_acquired = True
             self.reset_wall_recovery()
+            self.finish_initial_wall_acquisition()
             return False
 
         if self.wall_recovery_phase == 'none':
-            self.start_wall_recovery_advance()
-
-        if self.wall_recovery_phase == 'advance':
-            if front_distance < self.front_stop_distance:
-                self.start_wall_recovery_turn()
-            else:
-                distance_advanced = math.sqrt(
-                    (self.x - self.wall_recovery_start_x) ** 2 +
-                    (self.y - self.wall_recovery_start_y) ** 2
-                )
-                if distance_advanced < self.wall_recovery_forward_distance:
-                    self.smooth_wall_command(msg, self.wall_recovery_forward_speed, 0.0)
-                    return True
-
-                self.start_wall_recovery_turn()
+            self.start_wall_recovery_turn()
 
         if self.wall_recovery_phase == 'turn':
             turned = abs(self.normalize_angle(self.theta - self.wall_recovery_start_theta))
@@ -368,6 +379,24 @@ class Bug2Node(Node):
                 return True
 
             self.start_wall_recovery_advance()
+            self.smooth_wall_command(msg, 0.0, 0.0)
+            return True
+
+        if self.wall_recovery_phase == 'advance':
+            if front_distance < self.front_stop_distance:
+                self.start_wall_recovery_turn()
+                self.smooth_wall_command(msg, 0.0, 0.0)
+                return True
+
+            distance_advanced = math.sqrt(
+                (self.x - self.wall_recovery_start_x) ** 2 +
+                (self.y - self.wall_recovery_start_y) ** 2
+            )
+            if distance_advanced < self.wall_recovery_forward_distance:
+                self.smooth_wall_command(msg, self.wall_recovery_forward_speed, 0.0)
+                return True
+
+            self.start_wall_recovery_turn()
             self.smooth_wall_command(msg, 0.0, 0.0)
             return True
 
@@ -423,13 +452,10 @@ class Bug2Node(Node):
             if side_region <= self.wall_acquire_distance:
                 self.wall_acquired = True
                 self.reset_wall_recovery()
+                self.finish_initial_wall_acquisition()
             else:
                 self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
                 return
-
-        if front_side_region < self.wall_too_close:
-            self.smooth_wall_command(msg, 0.02, away_turn * self.wall_corner_angular_speed)
-            return
 
         if side_region > self.wall_lost_distance:
             self.wall_acquired = False
@@ -439,6 +465,10 @@ class Bug2Node(Node):
             return
 
         self.reset_wall_recovery()
+
+        if front_side_region < self.wall_too_close:
+            self.smooth_wall_command(msg, 0.02, away_turn * self.wall_corner_angular_speed)
+            return
 
         wall_error = side_region - self.wall_distance
         if abs(wall_error) < self.wall_follow_deadband:
@@ -498,10 +528,12 @@ class Bug2Node(Node):
             dist_m_line = self.distance_to_m_line()
             dist_to_hit = math.sqrt((self.x - self.hit_x) ** 2 + (self.y - self.hit_y) ** 2)
             closest_clear = closest_front_range is None or closest_front_range > self.avoidance_start_distance
-            if dist_to_hit > self.min_hit_separation:
+            if self.wall_acquired and not self.initial_wall_acquisition and dist_to_hit > self.min_hit_separation:
                 self.left_hit_region = True
 
             returned_to_hit = (
+                not self.initial_wall_acquisition and
+                self.wall_acquired and
                 self.left_hit_region and
                 dist_to_hit < self.hit_return_tolerance and
                 dist_to_goal >= (self.hit_distance - self.m_line_goal_improvement)
@@ -510,6 +542,8 @@ class Bug2Node(Node):
             if (closest_clear and
                     dist_m_line < self.m_line_tolerance and
                     dist_to_goal < (self.hit_distance - self.m_line_goal_improvement) and
+                    self.wall_acquired and
+                    not self.initial_wall_acquisition and
                     self.left_hit_region and
                     self.is_path_to_goal_clear(err_theta)):
                 self.get_logger().info(f'Linea M interceptada a {dist_to_goal:.2f} m. Cambio a GO_TO_GOAL.')
@@ -584,6 +618,7 @@ class Bug2Node(Node):
             f'estado={self.state}, dist={dist_text}, err_theta={err_text}, '
             f'path_front={path_front_text}, wall_side={self.wall_follow_side}, '
             f'wall_acquired={self.wall_acquired}, wall_recovery={self.wall_recovery_phase}, '
+            f'initial_wall={self.initial_wall_acquisition}, '
             f'odom_age={self.format_age(odom_age)}, scan_age={self.format_age(scan_age)}, '
             f'closest={self.format_closest()}, regions={self.format_regions()}'
         )
