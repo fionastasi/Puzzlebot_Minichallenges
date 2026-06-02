@@ -33,6 +33,10 @@ def generate_launch_description():
     wall_front_kp = LaunchConfiguration('wall_front_kp')
     wall_follow_deadband = LaunchConfiguration('wall_follow_deadband')
     wall_search_angular_speed = LaunchConfiguration('wall_search_angular_speed')
+    wall_recovery_forward_distance = LaunchConfiguration('wall_recovery_forward_distance')
+    wall_recovery_forward_speed = LaunchConfiguration('wall_recovery_forward_speed')
+    wall_recovery_turn_angle = LaunchConfiguration('wall_recovery_turn_angle')
+    wall_recovery_turn_speed = LaunchConfiguration('wall_recovery_turn_speed')
     wall_corner_angular_speed = LaunchConfiguration('wall_corner_angular_speed')
     wall_command_alpha = LaunchConfiguration('wall_command_alpha')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
@@ -111,6 +115,10 @@ def generate_launch_description():
             {'wall_front_kp': ParameterValue(wall_front_kp, value_type=float)},
             {'wall_follow_deadband': ParameterValue(wall_follow_deadband, value_type=float)},
             {'wall_search_angular_speed': ParameterValue(wall_search_angular_speed, value_type=float)},
+            {'wall_recovery_forward_distance': ParameterValue(wall_recovery_forward_distance, value_type=float)},
+            {'wall_recovery_forward_speed': ParameterValue(wall_recovery_forward_speed, value_type=float)},
+            {'wall_recovery_turn_angle': ParameterValue(wall_recovery_turn_angle, value_type=float)},
+            {'wall_recovery_turn_speed': ParameterValue(wall_recovery_turn_speed, value_type=float)},
             {'wall_corner_angular_speed': ParameterValue(wall_corner_angular_speed, value_type=float)},
             {'wall_command_alpha': ParameterValue(wall_command_alpha, value_type=float)},
             {'goal_tolerance': ParameterValue(goal_tolerance, value_type=float)},
@@ -309,6 +317,26 @@ def generate_launch_description():
             'wall_search_angular_speed',
             default_value='0.18',
             description='Velocidad angular para buscar la pared cuando se pierde lateralmente.',
+        ),
+        DeclareLaunchArgument(
+            'wall_recovery_forward_distance',
+            default_value='0.10',
+            description='Distancia en metros que avanza al perder la pared elegida antes de girar.',
+        ),
+        DeclareLaunchArgument(
+            'wall_recovery_forward_speed',
+            default_value='0.035',
+            description='Velocidad lineal durante el avance de recuperacion de pared perdida.',
+        ),
+        DeclareLaunchArgument(
+            'wall_recovery_turn_angle',
+            default_value='1.5708',
+            description='Angulo en radianes del giro hacia la pared elegida durante recuperacion.',
+        ),
+        DeclareLaunchArgument(
+            'wall_recovery_turn_speed',
+            default_value='0.30',
+            description='Velocidad angular del giro de recuperacion hacia la pared elegida.',
         ),
         DeclareLaunchArgument(
             'wall_corner_angular_speed',
