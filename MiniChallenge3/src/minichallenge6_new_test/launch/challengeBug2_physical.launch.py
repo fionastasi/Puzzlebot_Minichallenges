@@ -12,6 +12,8 @@ def generate_launch_description():
     use_localisation = LaunchConfiguration('use_localisation')
     cmd_vel_topic = LaunchConfiguration('cmd_vel_topic')
     odom_topic = LaunchConfiguration('odom_topic')
+    ekf_odom_topic = LaunchConfiguration('ekf_odom_topic')
+    bug2_odom_topic = LaunchConfiguration('bug2_odom_topic')
     scan_topic = LaunchConfiguration('scan_topic')
     goal_topic = LaunchConfiguration('goal_topic')
     wr_topic = LaunchConfiguration('wr_topic')
@@ -41,10 +43,22 @@ def generate_launch_description():
     scan_front_angle = LaunchConfiguration('scan_front_angle')
     use_aruco_tracker = LaunchConfiguration('use_aruco_tracker')
     use_aruco_monitor = LaunchConfiguration('use_aruco_monitor')
+    use_ekf = LaunchConfiguration('use_ekf')
+    use_aruco_correction = LaunchConfiguration('use_aruco_correction')
     aruco_cam_base_topic = LaunchConfiguration('aruco_cam_base_topic')
     aruco_marker_size = LaunchConfiguration('aruco_marker_size')
     aruco_detection_topic = LaunchConfiguration('aruco_detection_topic')
     aruco_detection_type = LaunchConfiguration('aruco_detection_type')
+    aruco_pose_source_frame = LaunchConfiguration('aruco_pose_source_frame')
+    max_marker_distance = LaunchConfiguration('max_marker_distance')
+    max_aruco_innovation = LaunchConfiguration('max_aruco_innovation')
+    max_aruco_raw_disagreement = LaunchConfiguration('max_aruco_raw_disagreement')
+    aruco_measurement_std_x = LaunchConfiguration('aruco_measurement_std_x')
+    aruco_measurement_std_y = LaunchConfiguration('aruco_measurement_std_y')
+    ekf_process_noise_x = LaunchConfiguration('ekf_process_noise_x')
+    ekf_process_noise_y = LaunchConfiguration('ekf_process_noise_y')
+    ekf_process_noise_theta = LaunchConfiguration('ekf_process_noise_theta')
+    ekf_diagnostic_period = LaunchConfiguration('ekf_diagnostic_period')
     odom_offset_x = LaunchConfiguration('odom_offset_x')
     odom_offset_y = LaunchConfiguration('odom_offset_y')
     odom_offset_theta = LaunchConfiguration('odom_offset_theta')
@@ -106,9 +120,40 @@ def generate_launch_description():
         ],
         remappings=[
             ('cmd_vel', cmd_vel_topic),
-            ('odom', odom_topic),
+            ('odom', bug2_odom_topic),
             ('scan', scan_topic),
             ('goal', goal_topic),
+        ],
+    )
+
+    ekf_localisation = Node(
+        package=package_name,
+        executable='ekf_localisation',
+        name='ekf_localisation',
+        output='screen',
+        condition=IfCondition(use_ekf),
+        parameters=[
+            {'use_sim_time': False},
+            {'aruco_detection_type': aruco_detection_type},
+            {'aruco_pose_source_frame': aruco_pose_source_frame},
+            {'camera_offset_x': ParameterValue(camera_offset_x, value_type=float)},
+            {'camera_offset_y': ParameterValue(camera_offset_y, value_type=float)},
+            {'camera_offset_z': ParameterValue(camera_offset_z, value_type=float)},
+            {'max_marker_distance': ParameterValue(max_marker_distance, value_type=float)},
+            {'max_aruco_innovation': ParameterValue(max_aruco_innovation, value_type=float)},
+            {'max_aruco_raw_disagreement': ParameterValue(max_aruco_raw_disagreement, value_type=float)},
+            {'aruco_measurement_std_x': ParameterValue(aruco_measurement_std_x, value_type=float)},
+            {'aruco_measurement_std_y': ParameterValue(aruco_measurement_std_y, value_type=float)},
+            {'process_noise_x': ParameterValue(ekf_process_noise_x, value_type=float)},
+            {'process_noise_y': ParameterValue(ekf_process_noise_y, value_type=float)},
+            {'process_noise_theta': ParameterValue(ekf_process_noise_theta, value_type=float)},
+            {'diagnostic_period': ParameterValue(ekf_diagnostic_period, value_type=float)},
+            {'use_aruco_correction': ParameterValue(use_aruco_correction, value_type=bool)},
+        ],
+        remappings=[
+            ('odom_raw', odom_topic),
+            ('odom_ekf', ekf_odom_topic),
+            ('markers', aruco_detection_topic),
         ],
     )
 
@@ -154,7 +199,17 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'odom_topic',
             default_value='odom',
-            description='Topico de odometria del Puzzlebot fisico.',
+            description='Topico de odometria cruda publicada por localisation.',
+        ),
+        DeclareLaunchArgument(
+            'ekf_odom_topic',
+            default_value='odom_ekf',
+            description='Topico de odometria corregida publicada por el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'bug2_odom_topic',
+            default_value='odom_ekf',
+            description='Topico de odometria que escucha Bug2. Usa odom para desactivar EKF en navegacion.',
         ),
         DeclareLaunchArgument(
             'scan_topic',
@@ -302,13 +357,23 @@ def generate_launch_description():
             description='Arranca monitor propio que reporta el ArUco mas cercano sin corregir odometria.',
         ),
         DeclareLaunchArgument(
+            'use_ekf',
+            default_value='true',
+            description='Arranca el nodo EKF que fusiona odometria cruda con landmarks ArUco.',
+        ),
+        DeclareLaunchArgument(
+            'use_aruco_correction',
+            default_value='true',
+            description='Si es true, el EKF corrige x,y usando ArUco; si es false, solo predice por odometria.',
+        ),
+        DeclareLaunchArgument(
             'odom_offset_x',
             default_value='0.295',
             description='Offset inicial x del robot dentro del mapa.',
         ),
         DeclareLaunchArgument(
             'odom_offset_y',
-            default_value='0.29',
+            default_value='-0.29',
             description='Offset inicial y del robot dentro del mapa.',
         ),
         DeclareLaunchArgument(
@@ -342,6 +407,56 @@ def generate_launch_description():
             description='Tipo de deteccion: markers_list, markers_list_u32, aruco_msgs, visualization_marker_array o aruco_opencv.',
         ),
         DeclareLaunchArgument(
+            'aruco_pose_source_frame',
+            default_value='camera',
+            description='Frame geometrico de la pose ArUco recibida: camera aplica transformacion a base, base la usa directo.',
+        ),
+        DeclareLaunchArgument(
+            'max_marker_distance',
+            default_value='2.0',
+            description='Distancia horizontal maxima para aceptar una deteccion ArUco en el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'max_aruco_innovation',
+            default_value='1.5',
+            description='Innovacion maxima en metros antes de rechazar una correccion ArUco.',
+        ),
+        DeclareLaunchArgument(
+            'max_aruco_raw_disagreement',
+            default_value='0.35',
+            description='Diferencia maxima entre odom raw y pose calculada por ArUco antes de rechazarla; 0 desactiva esta compuerta.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_measurement_std_x',
+            default_value='0.08',
+            description='Desviacion estandar de medicion ArUco en x para el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_measurement_std_y',
+            default_value='0.08',
+            description='Desviacion estandar de medicion ArUco en y para el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'ekf_process_noise_x',
+            default_value='0.003',
+            description='Ruido de proceso EKF para x.',
+        ),
+        DeclareLaunchArgument(
+            'ekf_process_noise_y',
+            default_value='0.003',
+            description='Ruido de proceso EKF para y.',
+        ),
+        DeclareLaunchArgument(
+            'ekf_process_noise_theta',
+            default_value='0.01',
+            description='Ruido de proceso EKF para theta.',
+        ),
+        DeclareLaunchArgument(
+            'ekf_diagnostic_period',
+            default_value='2.0',
+            description='Periodo en segundos para imprimir diagnosticos raw vs EKF.',
+        ),
+        DeclareLaunchArgument(
             'camera_offset_x',
             default_value='0.1241',
             description='Distancia de base_link a camara en x.',
@@ -359,5 +474,6 @@ def generate_launch_description():
         localisation,
         aruco_tracker,
         aruco_monitor,
+        ekf_localisation,
         bug2_node,
     ])
