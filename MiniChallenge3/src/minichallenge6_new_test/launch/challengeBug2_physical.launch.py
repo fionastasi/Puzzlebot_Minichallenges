@@ -35,6 +35,7 @@ def generate_launch_description():
     wall_follow_goal_tolerance = LaunchConfiguration('wall_follow_goal_tolerance')
     goal_pass_margin = LaunchConfiguration('goal_pass_margin')
     goal_pass_lateral_tolerance = LaunchConfiguration('goal_pass_lateral_tolerance')
+    goal_priority_distance = LaunchConfiguration('goal_priority_distance')
     near_goal_slow_distance = LaunchConfiguration('near_goal_slow_distance')
     near_goal_v_max = LaunchConfiguration('near_goal_v_max')
     scan_front_angle = LaunchConfiguration('scan_front_angle')
@@ -98,6 +99,7 @@ def generate_launch_description():
             {'wall_follow_goal_tolerance': ParameterValue(wall_follow_goal_tolerance, value_type=float)},
             {'goal_pass_margin': ParameterValue(goal_pass_margin, value_type=float)},
             {'goal_pass_lateral_tolerance': ParameterValue(goal_pass_lateral_tolerance, value_type=float)},
+            {'goal_priority_distance': ParameterValue(goal_priority_distance, value_type=float)},
             {'near_goal_slow_distance': ParameterValue(near_goal_slow_distance, value_type=float)},
             {'near_goal_v_max': ParameterValue(near_goal_v_max, value_type=float)},
             {'scan_front_angle': ParameterValue(scan_front_angle, value_type=float)},
@@ -256,7 +258,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_follow_goal_tolerance',
-            default_value='0.18',
+            default_value='0.08',
             description='Radio de captura de meta cuando Bug2 esta siguiendo pared.',
         ),
         DeclareLaunchArgument(
@@ -268,6 +270,11 @@ def generate_launch_description():
             'goal_pass_lateral_tolerance',
             default_value='0.22',
             description='Distancia lateral maxima a la linea inicio-meta para detener si ya cruzo la meta.',
+        ),
+        DeclareLaunchArgument(
+            'goal_priority_distance',
+            default_value='0.35',
+            description='Distancia a meta donde se prioriza llegar antes de cambiar a WALL_FOLLOWING salvo obstaculo critico.',
         ),
         DeclareLaunchArgument(
             'near_goal_slow_distance',

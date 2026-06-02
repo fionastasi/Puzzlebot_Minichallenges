@@ -62,9 +62,10 @@ class Bug2Node(Node):
         }
 
         self.declare_parameter('goal_tolerance', 0.05)
-        self.declare_parameter('wall_follow_goal_tolerance', 0.18)
+        self.declare_parameter('wall_follow_goal_tolerance', 0.08)
         self.declare_parameter('goal_pass_margin', 0.02)
         self.declare_parameter('goal_pass_lateral_tolerance', 0.22)
+        self.declare_parameter('goal_priority_distance', 0.35)
         self.declare_parameter('near_goal_slow_distance', 0.35)
         self.declare_parameter('near_goal_v_max', 0.025)
         self.declare_parameter('m_line_tolerance', 0.10)
@@ -103,6 +104,7 @@ class Bug2Node(Node):
         self.wall_follow_goal_tolerance = self.get_parameter('wall_follow_goal_tolerance').value
         self.goal_pass_margin = self.get_parameter('goal_pass_margin').value
         self.goal_pass_lateral_tolerance = self.get_parameter('goal_pass_lateral_tolerance').value
+        self.goal_priority_distance = self.get_parameter('goal_priority_distance').value
         self.near_goal_slow_distance = self.get_parameter('near_goal_slow_distance').value
         self.near_goal_v_max = self.get_parameter('near_goal_v_max').value
         self.m_line_tolerance = self.get_parameter('m_line_tolerance').value
@@ -261,6 +263,20 @@ class Bug2Node(Node):
             self.regions['front'] > self.front_slow_distance
         )
 
+    def goal_path_distance(self, err_theta):
+        return min(
+            self.regions['front'],
+            self.sector_min(err_theta, math.radians(15)),
+        )
+
+    def should_enter_wall_following(self, dist_to_goal, err_theta):
+        obstacle_distance = self.goal_path_distance(err_theta)
+
+        if dist_to_goal <= self.goal_priority_distance:
+            return obstacle_distance < self.front_stop_distance
+
+        return obstacle_distance < self.wall_follow_start_distance
+
     def enter_wall_following(self, dist_to_goal):
         self.hit_distance = dist_to_goal
         self.hit_x = self.x
@@ -379,7 +395,7 @@ class Bug2Node(Node):
             return
 
         if self.state == 'GO_TO_GOAL':
-            if closest_front_range is not None and closest_front_range < self.wall_follow_start_distance:
+            if self.should_enter_wall_following(dist_to_goal, err_theta):
                 self.enter_wall_following(dist_to_goal)
 
         elif self.state == 'WALL_FOLLOWING':
@@ -413,7 +429,7 @@ class Bug2Node(Node):
                 return
 
         if self.state == 'GO_TO_GOAL':
-            if closest_front_range is not None and closest_front_range < self.avoidance_start_distance:
+            if self.should_enter_wall_following(dist_to_goal, err_theta):
                 self.enter_wall_following(dist_to_goal)
                 self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
             elif abs(err_theta) > self.heading_tolerance:
@@ -466,10 +482,11 @@ class Bug2Node(Node):
 
         dist_text = 'sin_odom' if dist_to_goal is None else f'{dist_to_goal:.2f}'
         err_text = 'sin_odom' if err_theta is None else f'{err_theta:.2f}'
+        path_front_text = 'sin_odom' if err_theta is None else f'{self.goal_path_distance(err_theta):.2f}'
         self.get_logger().info(
             f'cmd_vel: v={cmd_msg.linear.x:.2f}, w={cmd_msg.angular.z:.2f}, '
             f'estado={self.state}, dist={dist_text}, err_theta={err_text}, '
-            f'wall_side={self.wall_follow_side}, '
+            f'path_front={path_front_text}, wall_side={self.wall_follow_side}, '
             f'odom_age={self.format_age(odom_age)}, scan_age={self.format_age(scan_age)}, '
             f'closest={self.format_closest()}, regions={self.format_regions()}'
         )
