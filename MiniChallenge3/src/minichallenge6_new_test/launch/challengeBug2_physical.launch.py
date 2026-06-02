@@ -287,7 +287,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_follow_speed',
-            default_value='0.035',
+            default_value='0.10',
             description='Velocidad lineal durante WALL_FOLLOWING.',
         ),
         DeclareLaunchArgument(

@@ -88,7 +88,7 @@ class Bug2Node(Node):
         self.declare_parameter('wall_acquire_distance', 0.22)
         self.declare_parameter('wall_too_close', 0.11)
         self.declare_parameter('wall_lost_distance', 0.35)
-        self.declare_parameter('wall_follow_speed', 0.035)
+        self.declare_parameter('wall_follow_speed', 0.10)
         self.declare_parameter('wall_follow_kp', 1.2)
         self.declare_parameter('wall_front_kp', 0.7)
         self.declare_parameter('wall_follow_deadband', 0.025)
