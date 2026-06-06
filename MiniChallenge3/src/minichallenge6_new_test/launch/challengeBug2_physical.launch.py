@@ -34,6 +34,8 @@ def generate_launch_description():
     wall_follow_deadband = LaunchConfiguration('wall_follow_deadband')
     wall_search_angular_speed = LaunchConfiguration('wall_search_angular_speed')
     wall_recovery_forward_distance = LaunchConfiguration('wall_recovery_forward_distance')
+    wall_recovery_first_forward_distance = LaunchConfiguration('wall_recovery_first_forward_distance')
+    wall_recovery_next_forward_distance = LaunchConfiguration('wall_recovery_next_forward_distance')
     wall_recovery_forward_speed = LaunchConfiguration('wall_recovery_forward_speed')
     wall_recovery_turn_angle = LaunchConfiguration('wall_recovery_turn_angle')
     wall_recovery_turn_speed = LaunchConfiguration('wall_recovery_turn_speed')
@@ -116,6 +118,8 @@ def generate_launch_description():
             {'wall_follow_deadband': ParameterValue(wall_follow_deadband, value_type=float)},
             {'wall_search_angular_speed': ParameterValue(wall_search_angular_speed, value_type=float)},
             {'wall_recovery_forward_distance': ParameterValue(wall_recovery_forward_distance, value_type=float)},
+            {'wall_recovery_first_forward_distance': ParameterValue(wall_recovery_first_forward_distance, value_type=float)},
+            {'wall_recovery_next_forward_distance': ParameterValue(wall_recovery_next_forward_distance, value_type=float)},
             {'wall_recovery_forward_speed': ParameterValue(wall_recovery_forward_speed, value_type=float)},
             {'wall_recovery_turn_angle': ParameterValue(wall_recovery_turn_angle, value_type=float)},
             {'wall_recovery_turn_speed': ParameterValue(wall_recovery_turn_speed, value_type=float)},
@@ -255,7 +259,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'front_stop_distance',
-            default_value='0.22',
+            default_value='0.25',
             description='Distancia frontal para detener avance y seguir pared en pasillos estrechos.',
         ),
         DeclareLaunchArgument(
@@ -285,12 +289,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_too_close',
-            default_value='0.11',
+            default_value='0.06',
             description='Distancia lateral minima antes de girar para separarse de la pared.',
         ),
         DeclareLaunchArgument(
             'wall_lost_distance',
-            default_value='0.25',
+            default_value='0.20',
             description='Distancia lateral a partir de la cual se considera que se perdio la pared.',
         ),
         DeclareLaunchArgument(
@@ -320,17 +324,27 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_recovery_forward_distance',
-            default_value='0.05',
+            default_value='0.12',
             description='Distancia en metros que avanza despues de girar al perder la pared elegida.',
         ),
         DeclareLaunchArgument(
+            'wall_recovery_first_forward_distance',
+            default_value='0.12',
+            description='Primer avance en metros al entrar a recuperacion por pared perdida.',
+        ),
+        DeclareLaunchArgument(
+            'wall_recovery_next_forward_distance',
+            default_value='0.20',
+            description='Avances posteriores en metros dentro de la misma recuperacion por pared perdida.',
+        ),
+        DeclareLaunchArgument(
             'wall_recovery_forward_speed',
-            default_value='0.10',
+            default_value='0.17',
             description='Velocidad lineal durante el avance de recuperacion de pared perdida.',
         ),
         DeclareLaunchArgument(
             'wall_recovery_turn_angle',
-            default_value='2.0',
+            default_value='1.5708',
             description='Angulo en radianes del primer giro hacia la pared elegida durante recuperacion.',
         ),
         DeclareLaunchArgument(
@@ -465,7 +479,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'max_aruco_raw_disagreement',
-            default_value='0.35',
+            default_value='0.25',
             description='Diferencia maxima entre odom raw y pose calculada por ArUco antes de rechazarla; 0 desactiva esta compuerta.',
         ),
         DeclareLaunchArgument(
