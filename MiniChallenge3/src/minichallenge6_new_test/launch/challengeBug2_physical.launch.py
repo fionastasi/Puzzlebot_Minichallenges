@@ -63,6 +63,7 @@ def generate_launch_description():
     max_aruco_raw_disagreement = LaunchConfiguration('max_aruco_raw_disagreement')
     aruco_measurement_std_x = LaunchConfiguration('aruco_measurement_std_x')
     aruco_measurement_std_y = LaunchConfiguration('aruco_measurement_std_y')
+    aruco_covariance_shrink_factor = LaunchConfiguration('aruco_covariance_shrink_factor')
     ekf_process_noise_x = LaunchConfiguration('ekf_process_noise_x')
     ekf_process_noise_y = LaunchConfiguration('ekf_process_noise_y')
     ekf_process_noise_theta = LaunchConfiguration('ekf_process_noise_theta')
@@ -160,6 +161,7 @@ def generate_launch_description():
             {'max_aruco_raw_disagreement': ParameterValue(max_aruco_raw_disagreement, value_type=float)},
             {'aruco_measurement_std_x': ParameterValue(aruco_measurement_std_x, value_type=float)},
             {'aruco_measurement_std_y': ParameterValue(aruco_measurement_std_y, value_type=float)},
+            {'aruco_covariance_shrink_factor': ParameterValue(aruco_covariance_shrink_factor, value_type=float)},
             {'process_noise_x': ParameterValue(ekf_process_noise_x, value_type=float)},
             {'process_noise_y': ParameterValue(ekf_process_noise_y, value_type=float)},
             {'process_noise_theta': ParameterValue(ekf_process_noise_theta, value_type=float)},
@@ -484,13 +486,18 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'aruco_measurement_std_x',
-            default_value='0.08',
+            default_value='0.02',
             description='Desviacion estandar de medicion ArUco en x para el EKF.',
         ),
         DeclareLaunchArgument(
             'aruco_measurement_std_y',
-            default_value='0.08',
+            default_value='0.02',
             description='Desviacion estandar de medicion ArUco en y para el EKF.',
+        ),
+        DeclareLaunchArgument(
+            'aruco_covariance_shrink_factor',
+            default_value='0.30',
+            description='Factor adicional para reducir covarianza x,y cada vez que se acepta una correccion ArUco.',
         ),
         DeclareLaunchArgument(
             'ekf_process_noise_x',

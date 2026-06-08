@@ -103,6 +103,7 @@ class EkfLocalisation(Node):
         self.declare_parameter('max_aruco_raw_disagreement', 0.35)
         self.declare_parameter('aruco_measurement_std_x', 0.08)
         self.declare_parameter('aruco_measurement_std_y', 0.08)
+        self.declare_parameter('aruco_covariance_shrink_factor', 0.25)
         self.declare_parameter('process_noise_x', 0.003)
         self.declare_parameter('process_noise_y', 0.003)
         self.declare_parameter('process_noise_theta', 0.01)
@@ -124,6 +125,11 @@ class EkfLocalisation(Node):
         self.max_marker_distance = self.get_parameter('max_marker_distance').value
         self.max_aruco_innovation = self.get_parameter('max_aruco_innovation').value
         self.max_aruco_raw_disagreement = self.get_parameter('max_aruco_raw_disagreement').value
+        self.aruco_covariance_shrink_factor = self.clamp(
+            self.get_parameter('aruco_covariance_shrink_factor').value,
+            0.0,
+            1.0,
+        )
         self.diagnostic_period = self.get_parameter('diagnostic_period').value
         self.max_prediction_dt = self.get_parameter('max_prediction_dt').value
         self.use_aruco_correction = self.get_parameter('use_aruco_correction').value
@@ -165,6 +171,9 @@ class EkfLocalisation(Node):
             'EKF inicializado: entrada odom_raw, salida odom_ekf, '
             f'aruco_pose_source_frame={self.aruco_pose_source_frame}'
         )
+
+    def clamp(self, value, min_value, max_value):
+        return max(min(value, max_value), min_value)
 
     def marker_message_type(self):
         if self.aruco_detection_type == 'aruco_msgs':
@@ -423,6 +432,9 @@ class EkfLocalisation(Node):
         identity = np.eye(3)
         joseph = identity - kalman_gain @ h_jacobian
         self.sigma = joseph @ self.sigma @ joseph.T + kalman_gain @ self.r_aruco @ kalman_gain.T
+        self.sigma[0:2, 0:2] *= self.aruco_covariance_shrink_factor
+        self.sigma[0:2, 2] *= self.aruco_covariance_shrink_factor
+        self.sigma[2, 0:2] *= self.aruco_covariance_shrink_factor
 
         self.last_aruco_status = (
             f'id={marker["id"]}, dist={marker["distance"]:.3f}, '
