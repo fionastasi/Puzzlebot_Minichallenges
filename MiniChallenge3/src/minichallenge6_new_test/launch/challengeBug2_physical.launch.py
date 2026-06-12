@@ -33,16 +33,14 @@ def generate_launch_description():
     wall_front_kp = LaunchConfiguration('wall_front_kp')
     wall_follow_deadband = LaunchConfiguration('wall_follow_deadband')
     wall_search_angular_speed = LaunchConfiguration('wall_search_angular_speed')
-    wall_recovery_forward_distance = LaunchConfiguration('wall_recovery_forward_distance')
-    wall_recovery_first_forward_distance = LaunchConfiguration('wall_recovery_first_forward_distance')
-    wall_recovery_next_forward_distance = LaunchConfiguration('wall_recovery_next_forward_distance')
-    wall_recovery_forward_speed = LaunchConfiguration('wall_recovery_forward_speed')
-    wall_recovery_turn_angle = LaunchConfiguration('wall_recovery_turn_angle')
-    wall_recovery_turn_speed = LaunchConfiguration('wall_recovery_turn_speed')
     wall_corner_angular_speed = LaunchConfiguration('wall_corner_angular_speed')
     wall_command_alpha = LaunchConfiguration('wall_command_alpha')
     goal_tolerance = LaunchConfiguration('goal_tolerance')
     wall_follow_goal_tolerance = LaunchConfiguration('wall_follow_goal_tolerance')
+    use_goal_orientation = LaunchConfiguration('use_goal_orientation')
+    goal_theta_tolerance = LaunchConfiguration('goal_theta_tolerance')
+    goal_align_kp = LaunchConfiguration('goal_align_kp')
+    goal_align_w_max = LaunchConfiguration('goal_align_w_max')
     goal_pass_margin = LaunchConfiguration('goal_pass_margin')
     goal_pass_lateral_tolerance = LaunchConfiguration('goal_pass_lateral_tolerance')
     goal_priority_distance = LaunchConfiguration('goal_priority_distance')
@@ -118,16 +116,14 @@ def generate_launch_description():
             {'wall_front_kp': ParameterValue(wall_front_kp, value_type=float)},
             {'wall_follow_deadband': ParameterValue(wall_follow_deadband, value_type=float)},
             {'wall_search_angular_speed': ParameterValue(wall_search_angular_speed, value_type=float)},
-            {'wall_recovery_forward_distance': ParameterValue(wall_recovery_forward_distance, value_type=float)},
-            {'wall_recovery_first_forward_distance': ParameterValue(wall_recovery_first_forward_distance, value_type=float)},
-            {'wall_recovery_next_forward_distance': ParameterValue(wall_recovery_next_forward_distance, value_type=float)},
-            {'wall_recovery_forward_speed': ParameterValue(wall_recovery_forward_speed, value_type=float)},
-            {'wall_recovery_turn_angle': ParameterValue(wall_recovery_turn_angle, value_type=float)},
-            {'wall_recovery_turn_speed': ParameterValue(wall_recovery_turn_speed, value_type=float)},
             {'wall_corner_angular_speed': ParameterValue(wall_corner_angular_speed, value_type=float)},
             {'wall_command_alpha': ParameterValue(wall_command_alpha, value_type=float)},
             {'goal_tolerance': ParameterValue(goal_tolerance, value_type=float)},
             {'wall_follow_goal_tolerance': ParameterValue(wall_follow_goal_tolerance, value_type=float)},
+            {'use_goal_orientation': ParameterValue(use_goal_orientation, value_type=bool)},
+            {'goal_theta_tolerance': ParameterValue(goal_theta_tolerance, value_type=float)},
+            {'goal_align_kp': ParameterValue(goal_align_kp, value_type=float)},
+            {'goal_align_w_max': ParameterValue(goal_align_w_max, value_type=float)},
             {'goal_pass_margin': ParameterValue(goal_pass_margin, value_type=float)},
             {'goal_pass_lateral_tolerance': ParameterValue(goal_pass_lateral_tolerance, value_type=float)},
             {'goal_priority_distance': ParameterValue(goal_priority_distance, value_type=float)},
@@ -286,7 +282,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_acquire_distance',
-            default_value='0.20',
+            default_value='0.25',
             description='Distancia lateral para considerar adquirida la pared elegida antes de hacer seguimiento fino.',
         ),
         DeclareLaunchArgument(
@@ -296,7 +292,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_lost_distance',
-            default_value='0.20',
+            default_value='0.27',
             description='Distancia lateral a partir de la cual se considera que se perdio la pared.',
         ),
         DeclareLaunchArgument(
@@ -321,38 +317,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'wall_search_angular_speed',
-            default_value='0.25',
+            default_value='0.35',
             description='Velocidad angular para buscar la pared cuando se pierde lateralmente.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_forward_distance',
-            default_value='0.12',
-            description='Distancia en metros que avanza despues de girar al perder la pared elegida.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_first_forward_distance',
-            default_value='0.12',
-            description='Primer avance en metros al entrar a recuperacion por pared perdida.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_next_forward_distance',
-            default_value='0.20',
-            description='Avances posteriores en metros dentro de la misma recuperacion por pared perdida.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_forward_speed',
-            default_value='0.17',
-            description='Velocidad lineal durante el avance de recuperacion de pared perdida.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_turn_angle',
-            default_value='1.5708',
-            description='Angulo en radianes del primer giro hacia la pared elegida durante recuperacion.',
-        ),
-        DeclareLaunchArgument(
-            'wall_recovery_turn_speed',
-            default_value='0.30',
-            description='Velocidad angular del giro de recuperacion hacia la pared elegida.',
         ),
         DeclareLaunchArgument(
             'wall_corner_angular_speed',
@@ -373,6 +339,26 @@ def generate_launch_description():
             'wall_follow_goal_tolerance',
             default_value='0.08',
             description='Radio de captura de meta cuando Bug2 esta siguiendo pared.',
+        ),
+        DeclareLaunchArgument(
+            'use_goal_orientation',
+            default_value='true',
+            description='Si es true, la meta Pose2D requiere llegar a x,y y luego al theta indicado.',
+        ),
+        DeclareLaunchArgument(
+            'goal_theta_tolerance',
+            default_value='0.12',
+            description='Tolerancia angular en radianes para considerar alcanzada la orientacion final.',
+        ),
+        DeclareLaunchArgument(
+            'goal_align_kp',
+            default_value='1.2',
+            description='Ganancia proporcional para alinear theta al llegar a la posicion de la meta.',
+        ),
+        DeclareLaunchArgument(
+            'goal_align_w_max',
+            default_value='0.25',
+            description='Velocidad angular maxima durante la alineacion final de theta.',
         ),
         DeclareLaunchArgument(
             'goal_pass_margin',
@@ -471,7 +457,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'max_marker_distance',
-            default_value='2.0',
+            default_value='1.0',
             description='Distancia horizontal maxima para aceptar una deteccion ArUco en el EKF.',
         ),
         DeclareLaunchArgument(
@@ -481,7 +467,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'max_aruco_raw_disagreement',
-            default_value='0.25',
+            default_value='1.0',
             description='Diferencia maxima entre odom raw y pose calculada por ArUco antes de rechazarla; 0 desactiva esta compuerta.',
         ),
         DeclareLaunchArgument(
