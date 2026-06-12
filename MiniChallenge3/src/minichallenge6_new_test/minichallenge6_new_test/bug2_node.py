@@ -248,23 +248,6 @@ class Bug2Node(Node):
         if self.state == 'WALL_FOLLOWING' and dist_to_goal <= self.wall_follow_goal_tolerance:
             return True, f'captura en WALL_FOLLOWING, dist={dist_to_goal:.2f} m'
 
-        if (
-                self.best_dist_to_goal <= self.wall_follow_goal_tolerance and
-                dist_to_goal > self.best_dist_to_goal + self.goal_pass_margin):
-            return True, (
-                f'ya paso cerca de meta, dist={dist_to_goal:.2f} m, '
-                f'mejor={self.best_dist_to_goal:.2f} m'
-            )
-
-        progress, goal_length, lateral_error = self.goal_line_progress()
-        crossed_goal_plane = progress >= (goal_length - self.goal_tolerance)
-        near_goal_corridor = lateral_error <= self.goal_pass_lateral_tolerance
-        if crossed_goal_plane and near_goal_corridor:
-            return True, (
-                f'cruzo plano de meta, progreso={progress:.2f}/{goal_length:.2f} m, '
-                f'error_lateral={lateral_error:.2f} m'
-            )
-
         return False, ''
 
     def stop_at_goal(self, reason):
@@ -668,14 +651,11 @@ class Bug2Node(Node):
                 self.get_logger().info(f'Linea M interceptada a {dist_to_goal:.2f} m. Cambio a GO_TO_GOAL.')
                 self.change_state('GO_TO_GOAL')
             elif returned_to_hit:
-                self.change_state('STOP')
                 self.get_logger().warn(
                     'Regrese al punto de impacto sin encontrar una Linea M mejor. '
-                    'La meta puede estar bloqueada.'
+                    'Continuo siguiendo pared; la meta no se considera alcanzada fuera del radio configurado.'
                 )
-                self.cmd_pub.publish(Twist())
-                self.goal_received = False
-                return
+                self.left_hit_region = False
 
         if self.state == 'GO_TO_GOAL':
             if self.should_enter_wall_following(dist_to_goal, err_theta):
@@ -693,10 +673,6 @@ class Bug2Node(Node):
                 msg.linear.x = self.clamp(self.k_rho * dist_to_goal, 0.0, self.v_max)
                 msg.angular.z = 0.0
 
-            if dist_to_goal < self.near_goal_slow_distance:
-                near_factor = self.clamp(dist_to_goal / self.near_goal_slow_distance, 0.25, 1.0)
-                msg.linear.x = min(msg.linear.x, self.near_goal_v_max * near_factor)
-
             if msg.linear.x > 0.0 and closest_front_range is not None and closest_front_range < self.front_slow_distance:
                 clearance = closest_front_range - self.front_stop_distance
                 slow_band = self.front_slow_distance - self.front_stop_distance
@@ -704,6 +680,10 @@ class Bug2Node(Node):
 
         elif self.state == 'WALL_FOLLOWING':
             self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
+
+        if msg.linear.x > 0.0 and dist_to_goal < self.near_goal_slow_distance:
+            near_factor = self.clamp(dist_to_goal / self.near_goal_slow_distance, 0.25, 1.0)
+            msg.linear.x = min(msg.linear.x, self.near_goal_v_max * near_factor)
 
         self.cmd_pub.publish(msg)
         self.publish_diagnostics(msg, dist_to_goal, err_theta, odom_age, scan_age)

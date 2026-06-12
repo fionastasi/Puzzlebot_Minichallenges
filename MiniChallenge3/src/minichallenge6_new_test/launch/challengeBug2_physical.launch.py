@@ -366,7 +366,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'goal_tolerance',
-            default_value='0.05',
+            default_value='0.10',
             description='Radio en metros para considerar alcanzada la meta.',
         ),
         DeclareLaunchArgument(
