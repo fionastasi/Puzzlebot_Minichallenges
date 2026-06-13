@@ -1,0 +1,759 @@
+#!/usr/bin/env python3
+import math
+import signal
+import sys
+
+import rclpy
+from rclpy import qos
+from rclpy.node import Node
+from geometry_msgs.msg import Pose2D, Twist
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
+
+
+def euler_from_quaternion(x, y, z, w):
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+class Bug2Node(Node):
+    def __init__(self):
+        super().__init__('bug2_node')
+
+        self.cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.odom_sub = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        self.goal_sub = self.create_subscription(Pose2D, 'goal', self.goal_callback, 10)
+        self.scan_sub = self.create_subscription(
+            LaserScan, 'scan', self.scan_callback, qos.qos_profile_sensor_data
+        )
+
+        signal.signal(signal.SIGINT, self.shutdown_function)
+
+        self.state = 'WAITING'
+        self.goal_received = False
+
+        self.x = 0.0
+        self.y = 0.0
+        self.theta = 0.0
+        self.target_x = 0.0
+        self.target_y = 0.0
+        self.target_theta = 0.0
+        self.start_x = 0.0
+        self.start_y = 0.0
+        self.hit_x = 0.0
+        self.hit_y = 0.0
+        self.hit_distance = float('inf')
+        self.left_hit_region = False
+        self.best_dist_to_goal = float('inf')
+
+        self.last_odom_time = None
+        self.last_scan_time = None
+        self.last_diagnostic_time = self.get_clock().now()
+
+        self.angle_ranges = []
+        self.closest_range = None
+        self.closest_angle = 0.0
+        self.closest_front_range = None
+        self.closest_front_angle = 0.0
+
+        self.regions = {
+            'front': 10.0, 'fright': 10.0, 'right': 10.0, 'bright': 10.0,
+            'back': 10.0, 'bleft': 10.0, 'left': 10.0, 'fleft': 10.0,
+        }
+
+        self.declare_parameter('goal_tolerance', 0.05)
+        self.declare_parameter('wall_follow_goal_tolerance', 0.08)
+        self.declare_parameter('use_goal_orientation', True)
+        self.declare_parameter('goal_theta_tolerance', 0.12)
+        self.declare_parameter('goal_align_kp', 1.2)
+        self.declare_parameter('goal_align_w_max', 0.25)
+        self.declare_parameter('goal_pass_margin', 0.02)
+        self.declare_parameter('goal_pass_lateral_tolerance', 0.22)
+        self.declare_parameter('goal_priority_distance', 0.35)
+        self.declare_parameter('near_goal_slow_distance', 0.35)
+        self.declare_parameter('near_goal_v_max', 0.025)
+        self.declare_parameter('m_line_tolerance', 0.10)
+        self.declare_parameter('min_hit_separation', 0.35)
+        self.declare_parameter('hit_return_tolerance', 0.18)
+        self.declare_parameter('m_line_goal_improvement', 0.12)
+        self.declare_parameter('k_rho', 0.6)
+        self.declare_parameter('k_alpha', 1.5)
+        self.declare_parameter('v_max', 0.08)
+        self.declare_parameter('w_max', 0.40)
+        self.declare_parameter('heading_tolerance', 0.15)
+        self.declare_parameter('min_forward_speed', 0.02)
+        self.declare_parameter('front_stop_distance', 0.18)
+        self.declare_parameter('front_slow_distance', 0.28)
+        self.declare_parameter('avoidance_start_distance', 0.30)
+        self.declare_parameter('wall_follow_start_distance', 0.24)
+        self.declare_parameter('wall_distance', 0.16)
+        self.declare_parameter('wall_follow_side', 'right')
+        self.declare_parameter('start_with_wall_acquisition', True)
+        self.declare_parameter('wall_acquire_distance', 0.18)
+        self.declare_parameter('wall_too_close', 0.11)
+        self.declare_parameter('wall_lost_distance', 0.27)
+        self.declare_parameter('wall_follow_speed', 0.10)
+        self.declare_parameter('wall_follow_kp', 1.2)
+        self.declare_parameter('wall_front_kp', 0.7)
+        self.declare_parameter('wall_follow_deadband', 0.025)
+        self.declare_parameter('wall_search_angular_speed', 0.18)
+        self.declare_parameter('wall_corner_angular_speed', 0.30)
+        self.declare_parameter('wall_corner_forward_speed', 0.025)
+        self.declare_parameter('wall_command_alpha', 0.35)
+        self.declare_parameter('avoidance_kv', 0.5)
+        self.declare_parameter('avoidance_kw', 0.7)
+        self.declare_parameter('sensor_timeout', 1.0)
+        self.declare_parameter('require_scan', True)
+        self.declare_parameter('require_odom', True)
+        self.declare_parameter('scan_front_angle', 0.0)
+
+        self.goal_tolerance = self.get_parameter('goal_tolerance').value
+        self.wall_follow_goal_tolerance = self.get_parameter('wall_follow_goal_tolerance').value
+        self.use_goal_orientation = self.get_parameter('use_goal_orientation').value
+        self.goal_theta_tolerance = self.get_parameter('goal_theta_tolerance').value
+        self.goal_align_kp = self.get_parameter('goal_align_kp').value
+        self.goal_align_w_max = self.get_parameter('goal_align_w_max').value
+        self.goal_pass_margin = self.get_parameter('goal_pass_margin').value
+        self.goal_pass_lateral_tolerance = self.get_parameter('goal_pass_lateral_tolerance').value
+        self.goal_priority_distance = self.get_parameter('goal_priority_distance').value
+        self.near_goal_slow_distance = self.get_parameter('near_goal_slow_distance').value
+        self.near_goal_v_max = self.get_parameter('near_goal_v_max').value
+        self.m_line_tolerance = self.get_parameter('m_line_tolerance').value
+        self.min_hit_separation = self.get_parameter('min_hit_separation').value
+        self.hit_return_tolerance = self.get_parameter('hit_return_tolerance').value
+        self.m_line_goal_improvement = self.get_parameter('m_line_goal_improvement').value
+        self.k_rho = self.get_parameter('k_rho').value
+        self.k_alpha = self.get_parameter('k_alpha').value
+        self.v_max = self.get_parameter('v_max').value
+        self.w_max = self.get_parameter('w_max').value
+        self.heading_tolerance = self.get_parameter('heading_tolerance').value
+        self.min_forward_speed = self.get_parameter('min_forward_speed').value
+        self.front_stop_distance = self.get_parameter('front_stop_distance').value
+        self.front_slow_distance = self.get_parameter('front_slow_distance').value
+        self.avoidance_start_distance = self.get_parameter('avoidance_start_distance').value
+        self.wall_follow_start_distance = self.get_parameter('wall_follow_start_distance').value
+        self.wall_distance = self.get_parameter('wall_distance').value
+        self.wall_follow_side = self.get_parameter('wall_follow_side').value.lower()
+        if self.wall_follow_side not in ('right', 'left'):
+            self.get_logger().warn(
+                f'wall_follow_side="{self.wall_follow_side}" no valido. Usando "right".'
+            )
+            self.wall_follow_side = 'right'
+        self.start_with_wall_acquisition = self.get_parameter('start_with_wall_acquisition').value
+        self.wall_acquire_distance = self.get_parameter('wall_acquire_distance').value
+        self.wall_too_close = self.get_parameter('wall_too_close').value
+        self.wall_lost_distance = self.get_parameter('wall_lost_distance').value
+        self.wall_follow_speed = self.get_parameter('wall_follow_speed').value
+        self.wall_follow_kp = self.get_parameter('wall_follow_kp').value
+        self.wall_front_kp = self.get_parameter('wall_front_kp').value
+        self.wall_follow_deadband = self.get_parameter('wall_follow_deadband').value
+        self.wall_search_angular_speed = self.get_parameter('wall_search_angular_speed').value
+        self.wall_corner_angular_speed = self.get_parameter('wall_corner_angular_speed').value
+        self.wall_corner_forward_speed = self.get_parameter('wall_corner_forward_speed').value
+        self.wall_command_alpha = self.get_parameter('wall_command_alpha').value
+        self.last_wall_linear = 0.0
+        self.last_wall_angular = 0.0
+        self.wall_acquired = False
+        self.initial_wall_acquisition = False
+        self.wall_corner_phase = 'none'
+        self.wall_corner_start_theta = 0.0
+        self.wall_corner_suppress_until_clear = False
+        self.avoidance_kv = self.get_parameter('avoidance_kv').value
+        self.avoidance_kw = self.get_parameter('avoidance_kw').value
+        self.sensor_timeout = self.get_parameter('sensor_timeout').value
+        self.require_scan = self.get_parameter('require_scan').value
+        self.require_odom = self.get_parameter('require_odom').value
+        self.scan_front_angle = self.get_parameter('scan_front_angle').value
+
+        self.create_timer(0.05, self.control_loop)
+        self.get_logger().info('Nodo Bug2 fisico inicializado. Esperando meta en goal...')
+
+    def normalize_angle(self, angle):
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle < -math.pi:
+            angle += 2.0 * math.pi
+        return angle
+
+    def clamp(self, value, min_value, max_value):
+        return max(min(value, max_value), min_value)
+
+    def change_state(self, new_state):
+        if self.state != new_state:
+            self.get_logger().info(f'Cambiando de estado: {self.state} -> {new_state}')
+            self.state = new_state
+
+    def sector_min(self, center_angle, half_width, default=10.0):
+        values = [
+            distance for angle, distance in self.angle_ranges
+            if abs(self.normalize_angle(angle - center_angle)) <= half_width
+        ]
+        return min(values) if values else default
+
+    def get_closest_object_info(self):
+        if not self.angle_ranges:
+            return None, 0.0
+        return min(
+            ((distance, angle) for angle, distance in self.angle_ranges),
+            key=lambda item: item[0],
+        )
+
+    def get_closest_front_object_info(self):
+        front_values = [
+            (distance, angle) for angle, distance in self.angle_ranges
+            if abs(angle) <= math.radians(40)
+        ]
+        if not front_values:
+            return None, 0.0
+        return min(front_values, key=lambda item: item[0])
+
+    def distance_to_m_line(self):
+        num = abs((self.target_y - self.start_y) * self.x -
+                  (self.target_x - self.start_x) * self.y +
+                  self.target_x * self.start_y -
+                  self.target_y * self.start_x)
+        den = math.sqrt((self.target_y - self.start_y) ** 2 +
+                        (self.target_x - self.start_x) ** 2)
+        if den == 0.0:
+            return 0.0
+        return num / den
+
+    def goal_line_progress(self):
+        goal_dx = self.target_x - self.start_x
+        goal_dy = self.target_y - self.start_y
+        goal_length = math.sqrt(goal_dx ** 2 + goal_dy ** 2)
+        if goal_length == 0.0:
+            return 0.0, 0.0, 0.0
+
+        robot_dx = self.x - self.start_x
+        robot_dy = self.y - self.start_y
+        progress = (robot_dx * goal_dx + robot_dy * goal_dy) / goal_length
+        lateral_error = self.distance_to_m_line()
+        return progress, goal_length, lateral_error
+
+    def goal_theta_error(self):
+        return self.normalize_angle(self.target_theta - self.theta)
+
+    def goal_position_tolerance_for_state(self):
+        if self.state == 'WALL_FOLLOWING':
+            return self.wall_follow_goal_tolerance
+        return self.goal_tolerance
+
+    def goal_position_reached(self, dist_to_goal):
+        return dist_to_goal <= self.goal_position_tolerance_for_state()
+
+    def goal_orientation_reached(self):
+        return abs(self.goal_theta_error()) <= self.goal_theta_tolerance
+
+    def should_stop_for_goal(self, dist_to_goal):
+        if dist_to_goal <= self.goal_tolerance:
+            if self.use_goal_orientation and not self.goal_orientation_reached():
+                return False, ''
+            return True, (
+                f'dist={dist_to_goal:.2f} m, '
+                f'err_theta_goal={self.goal_theta_error():.2f} rad'
+            )
+
+        if self.state == 'WALL_FOLLOWING' and dist_to_goal <= self.wall_follow_goal_tolerance:
+            if self.use_goal_orientation and not self.goal_orientation_reached():
+                return False, ''
+            return True, (
+                f'captura en WALL_FOLLOWING, dist={dist_to_goal:.2f} m, '
+                f'err_theta_goal={self.goal_theta_error():.2f} rad'
+            )
+
+        return False, ''
+
+    def stop_at_goal(self, reason):
+        self.change_state('STOP')
+        self.get_logger().info(f'Meta alcanzada. Deteniendo Bug2: {reason}.')
+        self.cmd_pub.publish(Twist())
+        self.goal_received = False
+
+    def set_goal_alignment_command(self, msg):
+        theta_error = self.goal_theta_error()
+        msg.linear.x = 0.0
+        msg.angular.z = self.clamp(
+            self.goal_align_kp * theta_error,
+            -self.goal_align_w_max,
+            self.goal_align_w_max,
+        )
+        return theta_error
+
+    def check_goal_priority(self, odom_age):
+        if odom_age is None or odom_age > self.sensor_timeout:
+            return False
+
+        dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+        self.best_dist_to_goal = min(self.best_dist_to_goal, dist_to_goal)
+        should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
+        if should_stop:
+            self.stop_at_goal(stop_reason)
+            return True
+
+        return False
+
+    def is_path_to_goal_clear(self, err_theta):
+        return (
+            self.sector_min(err_theta, math.radians(15)) > self.front_slow_distance and
+            self.regions['front'] > self.front_slow_distance
+        )
+
+    def goal_path_distance(self, err_theta):
+        return min(
+            self.regions['front'],
+            self.sector_min(err_theta, math.radians(15)),
+        )
+
+    def should_enter_wall_following(self, dist_to_goal, err_theta):
+        obstacle_distance = self.goal_path_distance(err_theta)
+
+        if dist_to_goal <= self.goal_priority_distance:
+            return obstacle_distance < self.front_stop_distance
+
+        return obstacle_distance < self.wall_follow_start_distance
+
+    def enter_wall_following(self, dist_to_goal, initial_acquisition=False):
+        self.hit_distance = dist_to_goal
+        self.hit_x = self.x
+        self.hit_y = self.y
+        self.left_hit_region = False
+        self.last_wall_linear = 0.0
+        self.last_wall_angular = 0.0
+        self.wall_acquired = False
+        self.initial_wall_acquisition = initial_acquisition
+        if initial_acquisition:
+            self.get_logger().info(
+                f'Adquisicion inicial de pared {self.wall_follow_side} desde '
+                f'({self.hit_x:.2f}, {self.hit_y:.2f}); meta a {self.hit_distance:.2f} m.'
+            )
+        else:
+            self.get_logger().info(
+                f'Punto de impacto registrado en ({self.hit_x:.2f}, {self.hit_y:.2f}) '
+                f'a {self.hit_distance:.2f} m.'
+            )
+        self.change_state('WALL_FOLLOWING')
+
+    def finish_initial_wall_acquisition(self):
+        if not self.initial_wall_acquisition:
+            return
+
+        self.initial_wall_acquisition = False
+        self.hit_x = self.x
+        self.hit_y = self.y
+        self.hit_distance = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+        self.left_hit_region = False
+        self.get_logger().info(
+            f'Pared {self.wall_follow_side} adquirida. Punto de seguimiento reiniciado en '
+            f'({self.hit_x:.2f}, {self.hit_y:.2f}) a {self.hit_distance:.2f} m de la meta.'
+        )
+
+    def reset_wall_corner_turn(self, suppress_until_clear=False):
+        self.wall_corner_phase = 'none'
+        self.wall_corner_start_theta = self.theta
+        self.wall_corner_suppress_until_clear = suppress_until_clear
+
+    def start_wall_corner_turn(self):
+        self.wall_corner_phase = 'turn'
+        self.wall_corner_start_theta = self.theta
+        self.wall_corner_suppress_until_clear = False
+        self.get_logger().info(
+            f'Esquina {self.wall_follow_side}: giro limitado a 90 grados.'
+        )
+
+    def wall_corner_turn_direction(self):
+        return -1.0 if self.wall_follow_side == 'left' else 1.0
+
+    def handle_wall_corner_turn(self, msg, front_distance):
+        if self.wall_corner_phase == 'none':
+            self.start_wall_corner_turn()
+
+        if front_distance >= self.front_stop_distance:
+            self.reset_wall_corner_turn()
+            return False
+
+        turned = abs(self.normalize_angle(self.theta - self.wall_corner_start_theta))
+        if turned < math.pi / 2.0:
+            self.smooth_wall_command(
+                msg,
+                0.0,
+                self.wall_corner_turn_direction() * self.wall_corner_angular_speed,
+            )
+            return True
+
+        self.reset_wall_corner_turn(suppress_until_clear=True)
+        self.last_wall_linear = 0.0
+        self.last_wall_angular = 0.0
+        return False
+
+    def set_avoidance_command(self, msg, closest_range, theta_closest):
+        theta_avoidance = theta_closest - math.pi if theta_closest > 0.0 else theta_closest + math.pi
+        theta_avoidance = self.normalize_angle(theta_avoidance)
+
+        if closest_range < self.front_stop_distance:
+            msg.linear.x = 0.0
+        else:
+            clearance = closest_range - self.front_stop_distance
+            msg.linear.x = self.clamp(
+                self.avoidance_kv * clearance,
+                0.0,
+                min(self.v_max, 0.04),
+            )
+
+        msg.angular.z = self.clamp(
+            self.avoidance_kw * theta_avoidance,
+            -self.w_max,
+            self.w_max,
+        )
+
+    def wall_follow_geometry(self):
+        if self.wall_follow_side == 'left':
+            return self.regions['fleft'], self.regions['left'], 1.0
+        return self.regions['fright'], self.regions['right'], -1.0
+
+    def smooth_wall_command(self, msg, target_linear, target_angular):
+        alpha = self.clamp(self.wall_command_alpha, 0.0, 1.0)
+        self.last_wall_linear = alpha * target_linear + (1.0 - alpha) * self.last_wall_linear
+        self.last_wall_angular = alpha * target_angular + (1.0 - alpha) * self.last_wall_angular
+        msg.linear.x = self.last_wall_linear
+        msg.angular.z = self.clamp(self.last_wall_angular, -self.w_max, self.w_max)
+
+    def set_wall_follow_command(self, msg, closest_front_range, closest_front_angle):
+        front_side_region, side_region, side_sign = self.wall_follow_geometry()
+        side_wall_region = min(side_region, front_side_region)
+        wall_lost_threshold = max(
+            self.wall_lost_distance,
+            self.wall_acquire_distance,
+        ) + self.wall_follow_deadband
+        away_turn = -side_sign
+        toward_turn = side_sign
+
+        front_distance = min(
+            self.regions['front'],
+            closest_front_range if closest_front_range is not None else 10.0,
+        )
+
+        if self.wall_corner_phase != 'none':
+            if self.handle_wall_corner_turn(msg, front_distance):
+                return
+
+        if self.wall_corner_suppress_until_clear and front_distance >= self.front_stop_distance:
+            self.wall_corner_suppress_until_clear = False
+
+        if self.wall_corner_suppress_until_clear:
+            self.smooth_wall_command(msg, 0.0, 0.0)
+            return
+
+        if (
+                front_distance < self.front_stop_distance and
+                self.wall_acquired and
+                side_wall_region <= self.wall_lost_distance and
+                not self.wall_corner_suppress_until_clear):
+            if self.handle_wall_corner_turn(msg, front_distance):
+                return
+
+        if front_distance < self.front_stop_distance and not self.wall_corner_suppress_until_clear:
+            corner_linear = 0.0
+            if (
+                    self.wall_acquired and
+                    side_wall_region <= self.wall_lost_distance and
+                    front_distance > self.wall_too_close):
+                corner_linear = min(self.wall_corner_forward_speed, self.wall_follow_speed * 0.25)
+
+            corner_angular = away_turn * self.wall_corner_angular_speed
+            if side_region > self.wall_distance:
+                corner_angular *= 0.65
+
+            self.smooth_wall_command(msg, corner_linear, corner_angular)
+            return
+
+        if not self.wall_acquired:
+            if side_wall_region <= self.wall_acquire_distance:
+                self.wall_acquired = True
+                self.finish_initial_wall_acquisition()
+            else:
+                self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
+                return
+
+        if side_wall_region > wall_lost_threshold:
+            self.wall_acquired = False
+            self.smooth_wall_command(msg, 0.02, toward_turn * self.wall_search_angular_speed)
+            return
+
+        if not self.wall_corner_suppress_until_clear:
+            self.reset_wall_corner_turn()
+
+        if front_side_region < self.wall_too_close:
+            self.smooth_wall_command(msg, 0.02, away_turn * self.wall_corner_angular_speed)
+            return
+
+        wall_error = side_region - self.wall_distance
+        if abs(wall_error) < self.wall_follow_deadband:
+            wall_error = 0.0
+
+        front_error = max(0.0, self.wall_distance - front_side_region)
+        target_angular = (
+            side_sign * self.wall_follow_kp * wall_error -
+            side_sign * self.wall_front_kp * front_error
+        )
+        target_linear = self.wall_follow_speed
+        if front_side_region < self.wall_distance:
+            target_linear *= 0.7
+        if side_region < self.wall_too_close:
+            target_linear *= 0.7
+
+        self.smooth_wall_command(msg, target_linear, target_angular)
+
+    def control_loop(self):
+        if not self.goal_received:
+            return
+
+        msg = Twist()
+        now = self.get_clock().now()
+        odom_age = self.message_age(now, self.last_odom_time)
+        scan_age = self.message_age(now, self.last_scan_time)
+
+        if self.check_goal_priority(odom_age):
+            return
+
+        if not self.sensors_ready(odom_age, scan_age):
+            self.cmd_pub.publish(msg)
+            self.publish_diagnostics(msg, None, None, odom_age, scan_age)
+            return
+
+        dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+        angle_to_goal = math.atan2(self.target_y - self.y, self.target_x - self.x)
+        err_theta = self.normalize_angle(angle_to_goal - self.theta)
+
+        closest_range, closest_angle = self.get_closest_object_info()
+        closest_front_range, closest_front_angle = self.get_closest_front_object_info()
+        self.closest_range = closest_range
+        self.closest_angle = closest_angle
+        self.closest_front_range = closest_front_range
+        self.closest_front_angle = closest_front_angle
+
+        should_stop, stop_reason = self.should_stop_for_goal(dist_to_goal)
+        if should_stop:
+            self.stop_at_goal(stop_reason)
+            return
+
+        if self.use_goal_orientation and self.goal_position_reached(dist_to_goal):
+            if not self.goal_orientation_reached():
+                self.change_state('ALIGN_TO_GOAL')
+                theta_goal_error = self.set_goal_alignment_command(msg)
+                self.cmd_pub.publish(msg)
+                self.publish_diagnostics(msg, dist_to_goal, theta_goal_error, odom_age, scan_age)
+                return
+
+            self.stop_at_goal(
+                f'pose alcanzada, dist={dist_to_goal:.2f} m, '
+                f'err_theta_goal={self.goal_theta_error():.2f} rad'
+            )
+            return
+
+        if self.state == 'GO_TO_GOAL':
+            if self.should_enter_wall_following(dist_to_goal, err_theta):
+                self.enter_wall_following(dist_to_goal)
+
+        elif self.state == 'WALL_FOLLOWING':
+            dist_m_line = self.distance_to_m_line()
+            dist_to_hit = math.sqrt((self.x - self.hit_x) ** 2 + (self.y - self.hit_y) ** 2)
+            closest_clear = closest_front_range is None or closest_front_range > self.avoidance_start_distance
+            if self.wall_acquired and not self.initial_wall_acquisition and dist_to_hit > self.min_hit_separation:
+                self.left_hit_region = True
+
+            returned_to_hit = (
+                not self.initial_wall_acquisition and
+                self.wall_acquired and
+                self.left_hit_region and
+                dist_to_hit < self.hit_return_tolerance and
+                dist_to_goal >= (self.hit_distance - self.m_line_goal_improvement)
+            )
+
+            if (closest_clear and
+                    dist_m_line < self.m_line_tolerance and
+                    dist_to_goal < (self.hit_distance - self.m_line_goal_improvement) and
+                    self.wall_acquired and
+                    not self.initial_wall_acquisition and
+                    self.left_hit_region and
+                    self.is_path_to_goal_clear(err_theta)):
+                self.get_logger().info(f'Linea M interceptada a {dist_to_goal:.2f} m. Cambio a GO_TO_GOAL.')
+                self.change_state('GO_TO_GOAL')
+            elif returned_to_hit:
+                self.get_logger().warn(
+                    'Regrese al punto de impacto sin encontrar una Linea M mejor. '
+                    'Continuo siguiendo pared; la meta no se considera alcanzada fuera del radio configurado.'
+                )
+                self.left_hit_region = False
+
+        if self.state == 'GO_TO_GOAL':
+            if self.should_enter_wall_following(dist_to_goal, err_theta):
+                self.enter_wall_following(dist_to_goal)
+                self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
+            elif abs(err_theta) > self.heading_tolerance:
+                msg.angular.z = self.clamp(self.k_alpha * err_theta, -self.w_max, self.w_max)
+                heading_factor = max(0.0, math.cos(err_theta))
+                if heading_factor < 0.2:
+                    msg.linear.x = 0.0
+                else:
+                    forward_speed = self.k_rho * dist_to_goal * heading_factor
+                    msg.linear.x = self.clamp(forward_speed, self.min_forward_speed, self.v_max)
+            else:
+                msg.linear.x = self.clamp(self.k_rho * dist_to_goal, 0.0, self.v_max)
+                msg.angular.z = 0.0
+
+            if msg.linear.x > 0.0 and closest_front_range is not None and closest_front_range < self.front_slow_distance:
+                clearance = closest_front_range - self.front_stop_distance
+                slow_band = self.front_slow_distance - self.front_stop_distance
+                msg.linear.x *= self.clamp(clearance / slow_band, 0.0, 1.0)
+
+        elif self.state == 'WALL_FOLLOWING':
+            self.set_wall_follow_command(msg, closest_front_range, closest_front_angle)
+
+        elif self.state == 'ALIGN_TO_GOAL':
+            if dist_to_goal > self.goal_tolerance:
+                self.change_state('GO_TO_GOAL')
+            else:
+                self.set_goal_alignment_command(msg)
+
+        if msg.linear.x > 0.0 and dist_to_goal < self.near_goal_slow_distance:
+            near_factor = self.clamp(dist_to_goal / self.near_goal_slow_distance, 0.25, 1.0)
+            msg.linear.x = min(msg.linear.x, self.near_goal_v_max * near_factor)
+
+        self.cmd_pub.publish(msg)
+        self.publish_diagnostics(msg, dist_to_goal, err_theta, odom_age, scan_age)
+
+    def sensors_ready(self, odom_age, scan_age):
+        odom_missing = self.require_odom and (odom_age is None or odom_age > self.sensor_timeout)
+        scan_missing = self.require_scan and (scan_age is None or scan_age > self.sensor_timeout)
+        return not odom_missing and not scan_missing
+
+    def publish_diagnostics(self, cmd_msg, dist_to_goal, err_theta, odom_age=None, scan_age=None):
+        now = self.get_clock().now()
+        if (now - self.last_diagnostic_time).nanoseconds < 2.0e9:
+            return
+
+        self.last_diagnostic_time = now
+        if odom_age is None:
+            odom_age = self.message_age(now, self.last_odom_time)
+        if scan_age is None:
+            scan_age = self.message_age(now, self.last_scan_time)
+
+        if odom_age is None or odom_age > self.sensor_timeout:
+            self.get_logger().warn('No estoy recibiendo odom reciente; el robot se mantiene detenido.')
+        if scan_age is None or scan_age > self.sensor_timeout:
+            self.get_logger().warn('No estoy recibiendo scan reciente; el robot se mantiene detenido.')
+
+        dist_text = 'sin_odom' if dist_to_goal is None else f'{dist_to_goal:.2f}'
+        err_text = 'sin_odom' if err_theta is None else f'{err_theta:.2f}'
+        goal_theta_text = 'sin_odom' if err_theta is None else f'{self.goal_theta_error():.2f}'
+        path_front_text = 'sin_odom' if err_theta is None else f'{self.goal_path_distance(err_theta):.2f}'
+        self.get_logger().info(
+            f'cmd_vel: v={cmd_msg.linear.x:.2f}, w={cmd_msg.angular.z:.2f}, '
+            f'estado={self.state}, dist={dist_text}, err_theta={err_text}, '
+            f'err_theta_goal={goal_theta_text}, path_front={path_front_text}, '
+            f'wall_side={self.wall_follow_side}, '
+            f'wall_acquired={self.wall_acquired}, '
+            f'wall_corner={self.wall_corner_phase}, '
+            f'initial_wall={self.initial_wall_acquisition}, '
+            f'odom_age={self.format_age(odom_age)}, scan_age={self.format_age(scan_age)}, '
+            f'closest={self.format_closest()}, regions={self.format_regions()}'
+        )
+
+    def message_age(self, now, last_time):
+        if last_time is None:
+            return None
+        return (now - last_time).nanoseconds * 1.0e-9
+
+    def format_age(self, age):
+        if age is None:
+            return 'nunca'
+        return f'{age:.1f}s'
+
+    def format_closest(self):
+        if self.closest_range is None:
+            return 'none'
+        return f'{self.closest_range:.2f}@{math.degrees(self.closest_angle):.0f}deg'
+
+    def format_regions(self):
+        return (
+            f"front={self.regions['front']:.2f}, fright={self.regions['fright']:.2f}, "
+            f"right={self.regions['right']:.2f}, bright={self.regions['bright']:.2f}, "
+            f"back={self.regions['back']:.2f}, bleft={self.regions['bleft']:.2f}, "
+            f"left={self.regions['left']:.2f}, fleft={self.regions['fleft']:.2f}"
+        )
+
+    def odom_callback(self, msg):
+        self.last_odom_time = self.get_clock().now()
+        self.x = msg.pose.pose.position.x
+        self.y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self.theta = euler_from_quaternion(q.x, q.y, q.z, q.w)
+
+    def goal_callback(self, msg):
+        self.target_x = msg.x
+        self.target_y = msg.y
+        self.target_theta = self.normalize_angle(msg.theta)
+        self.start_x = self.x
+        self.start_y = self.y
+        self.hit_distance = float('inf')
+        self.left_hit_region = False
+        self.best_dist_to_goal = float('inf')
+        self.goal_received = True
+        self.get_logger().info(
+            f'Bug2 Meta: x={self.target_x}, y={self.target_y}, '
+            f'theta={self.target_theta:.2f}. Linea M trazada.'
+        )
+        if self.start_with_wall_acquisition:
+            dist_to_goal = math.sqrt((self.target_x - self.x) ** 2 + (self.target_y - self.y) ** 2)
+            self.enter_wall_following(dist_to_goal, initial_acquisition=True)
+        else:
+            self.change_state('GO_TO_GOAL')
+
+    def scan_callback(self, msg):
+        self.last_scan_time = self.get_clock().now()
+        self.angle_ranges = []
+
+        for index, distance in enumerate(msg.ranges):
+            angle = msg.angle_min + index * msg.angle_increment - math.radians(self.scan_front_angle)
+            angle = self.normalize_angle(angle)
+
+            if math.isinf(distance) or math.isnan(distance) or distance > msg.range_max:
+                clean_distance = 10.0
+            elif distance < max(msg.range_min, 0.12):
+                clean_distance = 0.01
+            else:
+                clean_distance = distance
+
+            self.angle_ranges.append((angle, clean_distance))
+
+        self.regions = {
+            'front': self.sector_min(0.0, math.radians(22.5)),
+            'fright': self.sector_min(math.radians(-45), math.radians(22.5)),
+            'right': self.sector_min(math.radians(-90), math.radians(22.5)),
+            'bright': self.sector_min(math.radians(-135), math.radians(22.5)),
+            'back': self.sector_min(math.pi, math.radians(22.5)),
+            'bleft': self.sector_min(math.radians(135), math.radians(22.5)),
+            'left': self.sector_min(math.radians(90), math.radians(22.5)),
+            'fleft': self.sector_min(math.radians(45), math.radians(22.5)),
+        }
+        self.closest_range, self.closest_angle = self.get_closest_object_info()
+        self.closest_front_range, self.closest_front_angle = self.get_closest_front_object_info()
+
+    def shutdown_function(self, signum, frame):
+        self.cmd_pub.publish(Twist())
+        rclpy.shutdown()
+        sys.exit(0)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = Bug2Node()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
